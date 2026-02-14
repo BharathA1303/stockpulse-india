@@ -1,0 +1,20 @@
+{
+  "name": "stockpulse-india",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Real-time Indian stock market monitoring dashboard tracking NSE & BSE listed companies",
+  "scripts": {
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "build": "cd client && npm run build",
+    "start": "cd server && npm start",
+    "test": "cd client && npm test",
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install"
+  },
+  "keywords": ["stocks", "india", "nse", "bse", "nifty", "sensex", "finance", "dashboard"],
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
