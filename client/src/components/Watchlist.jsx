@@ -1,12 +1,18 @@
-import { useEffect, useState, useRef } from 'react';
-import { API_BASE_URL } from '../constants/stockSymbols';
-import { formatINR, formatChange, formatPercent } from '../utils/formatters';
+import { useEffect, useState, useRef } from "react";
+import { API_BASE_URL } from "../constants/stockSymbols";
+import { formatINR, formatChange, formatPercent } from "../utils/formatters";
 
 /**
  * Premium sidebar watchlist with color-coded items and live prices.
  * Uses WebSocket allTicks for real-time updates, REST as fallback.
  */
-export default function Watchlist({ watchlist, onRemove, onSelect, selectedSymbol, allTicks }) {
+export default function Watchlist({
+  watchlist,
+  onRemove,
+  onSelect,
+  selectedSymbol,
+  allTicks,
+}) {
   const [prices, setPrices] = useState({});
   const [loading, setLoading] = useState(false);
   const prevTickRef = useRef(null);
@@ -17,9 +23,9 @@ export default function Watchlist({ watchlist, onRemove, onSelect, selectedSymbo
     if (prevTickRef.current === allTicks) return;
     prevTickRef.current = allTicks;
 
-    setPrices(prev => {
+    setPrices((prev) => {
       const updated = { ...prev };
-      watchlist.forEach(symbol => {
+      watchlist.forEach((symbol) => {
         const tick = allTicks[symbol];
         if (tick) {
           updated[symbol] = {
@@ -27,7 +33,10 @@ export default function Watchlist({ watchlist, onRemove, onSelect, selectedSymbo
             price: tick.price,
             change: tick.change,
             changePercent: tick.changePercent,
-            shortName: tick.shortName || updated[symbol]?.shortName || symbol.replace(/\.(NS|BO)$/, ''),
+            shortName:
+              tick.shortName ||
+              updated[symbol]?.shortName ||
+              symbol.replace(/\.(NS|BO)$/, ""),
           };
         }
       });
@@ -52,7 +61,7 @@ export default function Watchlist({ watchlist, onRemove, onSelect, selectedSymbo
         watchlist.map(async (symbol) => {
           try {
             const res = await fetch(
-              `${API_BASE_URL}/api/quote/${encodeURIComponent(symbol)}`
+              `${API_BASE_URL}/api/quote/${encodeURIComponent(symbol)}`,
             );
             if (res.ok) {
               newPrices[symbol] = await res.json();
@@ -60,10 +69,10 @@ export default function Watchlist({ watchlist, onRemove, onSelect, selectedSymbo
           } catch {
             // silently skip failed fetches
           }
-        })
+        }),
       );
       if (!cancelled) {
-        setPrices(prev => ({ ...prev, ...newPrices }));
+        setPrices((prev) => ({ ...prev, ...newPrices }));
         setLoading(false);
       }
     };
@@ -79,7 +88,9 @@ export default function Watchlist({ watchlist, onRemove, onSelect, selectedSymbo
   return (
     <aside className="watchlist" aria-label="Your watchlist">
       <div className="watchlist-header">
-        <h2 className="section-title" style={{ marginBottom: 0 }}>Watchlist</h2>
+        <h2 className="section-title" style={{ marginBottom: 0 }}>
+          Watchlist
+        </h2>
         {watchlist.length > 0 && (
           <span className="watchlist-count">{watchlist.length} stocks</span>
         )}
@@ -97,7 +108,7 @@ export default function Watchlist({ watchlist, onRemove, onSelect, selectedSymbo
         <div className="watchlist-loading" aria-busy="true">
           {watchlist.map((sym) => (
             <div key={sym} className="watchlist-item skeleton">
-              <div className="skeleton-line" style={{ height: '42px' }} />
+              <div className="skeleton-line" style={{ height: "42px" }} />
             </div>
           ))}
         </div>
@@ -109,7 +120,10 @@ export default function Watchlist({ watchlist, onRemove, onSelect, selectedSymbo
             const p = prices[symbol];
             const isUp = p ? p.change >= 0 : true;
             return (
-              <li key={symbol} className={`watchlist-item ${isUp ? 'up' : 'down'} ${symbol === selectedSymbol ? 'selected' : ''}`}>
+              <li
+                key={symbol}
+                className={`watchlist-item ${isUp ? "up" : "down"} ${symbol === selectedSymbol ? "selected" : ""}`}
+              >
                 <button
                   className="watchlist-item-btn"
                   onClick={() => onSelect(symbol)}
@@ -117,7 +131,7 @@ export default function Watchlist({ watchlist, onRemove, onSelect, selectedSymbo
                 >
                   <div className="watchlist-item-left">
                     <span className="watchlist-symbol">
-                      {symbol.replace(/\.(NS|BO)$/, '')}
+                      {symbol.replace(/\.(NS|BO)$/, "")}
                     </span>
                     <span className="watchlist-name">
                       {p?.shortName || symbol}
@@ -125,18 +139,23 @@ export default function Watchlist({ watchlist, onRemove, onSelect, selectedSymbo
                   </div>
                   <div className="watchlist-item-right">
                     <span className="watchlist-price">
-                      {p ? formatINR(p.price) : '—'}
+                      {p ? formatINR(p.price) : "—"}
                     </span>
-                    <span className={`watchlist-change ${isUp ? 'up' : 'down'}`}>
+                    <span
+                      className={`watchlist-change ${isUp ? "up" : "down"}`}
+                    >
                       {p
-                        ? `${isUp ? '+' : ''}${formatPercent(p.changePercent)}`
-                        : ''}
+                        ? `${isUp ? " " : " "}${formatPercent(p.changePercent)}`
+                        : ""}
                     </span>
                   </div>
                 </button>
                 <button
                   className="watchlist-remove"
-                  onClick={(e) => { e.stopPropagation(); onRemove(symbol); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove(symbol);
+                  }}
                   aria-label={`Remove ${symbol} from watchlist`}
                   title="Remove"
                 >
