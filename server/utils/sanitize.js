@@ -9,8 +9,8 @@
 export function sanitizeSymbol(raw) {
   if (!raw || typeof raw !== 'string') return null;
   const trimmed = raw.trim().toUpperCase();
-  // Allow A-Z, 0-9, dots, hyphens, carets, ampersands
-  if (!/^[A-Z0-9\.\-\^&]{1,20}$/.test(trimmed)) return null;
+  // Allow A-Z, 0-9, dots, hyphens, carets, ampersands, underscores
+  if (!/^[A-Z0-9\.\-\^&_]{1,20}$/.test(trimmed)) return null;
   return trimmed;
 }
 

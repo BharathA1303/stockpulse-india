@@ -18,13 +18,26 @@ try {
 }
 
 const router = Router();
-const cache = new Cache(60_000);
+const cache = new Cache(30_000);
 
 function getRangeOptions(range) {
   const now = new Date();
   let period1, interval;
 
   switch (range) {
+    case '1m':
+    case '2m':
+    case '3m':
+    case '5m':
+    case '10m':
+    case '15m':
+    case '30m':
+      period1 = new Date(now); period1.setDate(period1.getDate() - 1);
+      interval = '1m'; break;
+    case '1h':
+    case '4h':
+      period1 = new Date(now); period1.setDate(period1.getDate() - 5);
+      interval = '5m'; break;
     case '1d':
       period1 = new Date(now); period1.setDate(period1.getDate() - 1);
       interval = '5m'; break;
@@ -56,8 +69,10 @@ router.get('/:symbol', async (req, res) => {
     }
 
     const range = (req.query.range || '1mo').toLowerCase();
+    const validRanges = ['1m','2m','3m','5m','10m','15m','30m','1h','4h','1d','1w','1mo','3mo','1y'];
+    const normalizedRange = validRanges.includes(range) ? range : '1mo';
     const fullSymbol = ensureExchangeSuffix(symbol);
-    const cacheKey = `chart:${fullSymbol}:${range}`;
+    const cacheKey = `chart:${fullSymbol}:${normalizedRange}`;
 
     const cached = cache.get(cacheKey);
     if (cached) return res.json(cached);
@@ -65,7 +80,7 @@ router.get('/:symbol', async (req, res) => {
     // Try simulator first
     const simulator = req.app.get('simulator');
     if (simulator) {
-      const simData = simulator.getChartData(fullSymbol, range);
+      const simData = simulator.getChartData(fullSymbol, normalizedRange);
       if (simData && simData.data && simData.data.length > 0) {
         cache.set(cacheKey, simData);
         return res.json(simData);
@@ -77,7 +92,7 @@ router.get('/:symbol', async (req, res) => {
       return res.status(404).json({ error: 'No chart data available' });
     }
 
-    const { period1, period2, interval } = getRangeOptions(range);
+    const { period1, period2, interval } = getRangeOptions(normalizedRange);
 
     let result;
     try {
@@ -92,7 +107,7 @@ router.get('/:symbol', async (req, res) => {
 
     const payload = {
       symbol: fullSymbol,
-      range,
+      range: normalizedRange,
       data: result.quotes
         .filter(q => q.close != null)
         .map(q => ({

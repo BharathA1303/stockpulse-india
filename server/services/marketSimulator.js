@@ -116,6 +116,9 @@ export default class MarketSimulator {
       { symbol: '^NSEI', name: 'NIFTY 50', sector: 'Indices', industry: 'Market Index', exchange: 'NSE', basePrice: 25000, previousClose: 24950, fiftyTwoWeekHigh: 26500, fiftyTwoWeekLow: 21800, marketCap: 0, beta: 0.9 },
       { symbol: '^BSESN', name: 'S&P BSE SENSEX', sector: 'Indices', industry: 'Market Index', exchange: 'BSE', basePrice: 82000, previousClose: 81800, fiftyTwoWeekHigh: 86000, fiftyTwoWeekLow: 71000, marketCap: 0, beta: 0.9 },
       { symbol: '^NSEBANK', name: 'NIFTY BANK', sector: 'Indices', industry: 'Market Index', exchange: 'NSE', basePrice: 55000, previousClose: 54800, fiftyTwoWeekHigh: 58500, fiftyTwoWeekLow: 44000, marketCap: 0, beta: 1.1 },
+      { symbol: '^NSEI_MIDCAP', name: 'NIFTY MIDCAP 50', sector: 'Indices', industry: 'Market Index', exchange: 'NSE', basePrice: 13500, previousClose: 13450, fiftyTwoWeekHigh: 15200, fiftyTwoWeekLow: 10800, marketCap: 0, beta: 1.15 },
+      { symbol: '^NSEI_FIN', name: 'NIFTY FINANCIAL', sector: 'Indices', industry: 'Market Index', exchange: 'NSE', basePrice: 28000, previousClose: 27900, fiftyTwoWeekHigh: 30500, fiftyTwoWeekLow: 22000, marketCap: 0, beta: 1.05 },
+      { symbol: '^NSEI_IT', name: 'NIFTY IT', sector: 'Indices', industry: 'Market Index', exchange: 'NSE', basePrice: 42000, previousClose: 41900, fiftyTwoWeekHigh: 45000, fiftyTwoWeekLow: 33000, marketCap: 0, beta: 1.2 },
     ];
 
     for (const idx of indices) {
@@ -248,6 +251,10 @@ export default class MarketSimulator {
       eps: stock.eps,
       bookValue: stock.bookValue,
       dividendYield: stock.dividendYield,
+      sector: stock.sector || null,
+      industry: stock.industry || null,
+      avgVolume: stock.avgVolume || null,
+      beta: stock.beta || null,
     };
   }
 
@@ -271,13 +278,22 @@ export default class MarketSimulator {
     }
 
     const configs = {
-      '1m': { count: 60, intervalMs: 1 * 60 * 1000, volatility: 0.001 },
-      '5m': { count: 60, intervalMs: 5 * 60 * 1000, volatility: 0.0015 },
-      '1d': { count: 78, intervalMs: 5 * 60 * 1000, volatility: 0.003 },
-      '1w': { count: 150, intervalMs: 15 * 60 * 1000, volatility: 0.004 },
-      '1mo': { count: 30, intervalMs: 24 * 60 * 60 * 1000, volatility: 0.012 },
-      '3mo': { count: 90, intervalMs: 24 * 60 * 60 * 1000, volatility: 0.010 },
-      '1y': { count: 252, intervalMs: 24 * 60 * 60 * 1000, volatility: 0.015 },
+      // Minute-level intraday: each candle = 1 unit of that minute interval
+      '1m':  { count: 120, intervalMs: 1 * 60 * 1000,   volatility: 0.0008,  type: 'intraday' },
+      '2m':  { count: 120, intervalMs: 2 * 60 * 1000,   volatility: 0.0012,  type: 'intraday' },
+      '3m':  { count: 100, intervalMs: 3 * 60 * 1000,   volatility: 0.0014,  type: 'intraday' },
+      '5m':  { count: 78,  intervalMs: 5 * 60 * 1000,   volatility: 0.0018,  type: 'intraday' },
+      '10m': { count: 78,  intervalMs: 10 * 60 * 1000,  volatility: 0.0022,  type: 'intraday' },
+      '15m': { count: 78,  intervalMs: 15 * 60 * 1000,  volatility: 0.0028,  type: 'intraday' },
+      '30m': { count: 78,  intervalMs: 30 * 60 * 1000,  volatility: 0.0035,  type: 'intraday' },
+      '1h':  { count: 78,  intervalMs: 60 * 60 * 1000,  volatility: 0.0045,  type: 'intraday' },
+      '4h':  { count: 60,  intervalMs: 4 * 60 * 60 * 1000, volatility: 0.006, type: 'intraday' },
+      // Daily+ candles
+      '1d':  { count: 78,  intervalMs: 5 * 60 * 1000,   volatility: 0.003,   type: 'today' },
+      '1w':  { count: 200, intervalMs: 15 * 60 * 1000,  volatility: 0.004,   type: 'week' },
+      '1mo': { count: 30,  intervalMs: 24 * 60 * 60 * 1000, volatility: 0.012, type: 'daily' },
+      '3mo': { count: 90,  intervalMs: 24 * 60 * 60 * 1000, volatility: 0.010, type: 'daily' },
+      '1y':  { count: 252, intervalMs: 24 * 60 * 60 * 1000, volatility: 0.015, type: 'daily' },
     };
 
     const cfg = configs[range] || configs['1mo'];
@@ -295,52 +311,60 @@ export default class MarketSimulator {
     let price = basePrice * (0.93 + Math.random() * 0.07);
     const now = Date.now();
 
-    // Calculate start time based on range
+    // Calculate start time based on range type
     let startTime;
-    if (range === '1m') {
-      // Last 60 minutes, 1-min candles
-      const today = new Date();
-      today.setHours(today.getHours(), today.getMinutes() - 60, 0, 0);
-      startTime = today.getTime();
-    } else if (range === '5m') {
-      // Last 5 hours, 5-min candles
-      const today = new Date();
-      today.setHours(today.getHours() - 5, today.getMinutes(), 0, 0);
-      startTime = today.getTime();
-    } else if (range === '1d') {
-      const today = new Date();
-      today.setHours(9, 15, 0, 0);
-      startTime = today.getTime();
-    } else if (range === '1w') {
-      startTime = now - 7 * 24 * 60 * 60 * 1000;
-    } else if (range === '1y') {
-      startTime = now - 365 * 24 * 60 * 60 * 1000;
-    } else {
-      startTime = now - count * intervalMs;
-    }
+    const cfg = {
+      '1m':  () => now - count * 60 * 1000,
+      '2m':  () => now - count * 2 * 60 * 1000,
+      '3m':  () => now - count * 3 * 60 * 1000,
+      '5m':  () => now - count * 5 * 60 * 1000,
+      '10m': () => now - count * 10 * 60 * 1000,
+      '15m': () => now - count * 15 * 60 * 1000,
+      '30m': () => now - count * 30 * 60 * 1000,
+      '1h':  () => now - count * 60 * 60 * 1000,
+      '4h':  () => now - count * 4 * 60 * 60 * 1000,
+      '1d':  () => { const d = new Date(); d.setHours(9, 15, 0, 0); return d.getTime(); },
+      '1w':  () => now - 7 * 24 * 60 * 60 * 1000,
+      '1y':  () => now - 365 * 24 * 60 * 60 * 1000,
+    };
+    startTime = cfg[range] ? cfg[range]() : now - count * intervalMs;
+
+    // Determine if we should skip weekends
+    const isDailyOrMore = intervalMs >= 24 * 60 * 60 * 1000;
+
+    // Scale volume based on range
+    const baseVol = range === '1m' || range === '2m' || range === '3m'
+      ? 5000 + Math.random() * 30000
+      : range === '5m' || range === '10m'
+        ? 20000 + Math.random() * 80000
+        : 50000 + Math.random() * 500000;
 
     for (let i = 0; i < count; i++) {
       const timestamp = startTime + i * intervalMs;
 
       // Skip weekends for daily+ candles
-      if (intervalMs >= 24 * 60 * 60 * 1000) {
+      if (isDailyOrMore) {
         const day = new Date(timestamp).getDay();
         if (day === 0 || day === 6) continue;
       }
 
+      // Don't generate future candles
+      if (timestamp > now) break;
+
       const open = r2(price);
 
-      // Generate realistic intra-candle price action
-      const change = price * volatility * gaussianRandom();
+      // Generate realistic intra-candle price action with trend bias
+      const trendBias = (Math.random() > 0.5 ? 1 : -1) * price * volatility * 0.3;
+      const change = price * volatility * gaussianRandom() + trendBias * 0.1;
       const close = r2(Math.max(1, open + change));
 
-      // High and low extend beyond open/close
-      const spike1 = Math.abs(price * volatility * gaussianRandom() * 0.5);
-      const spike2 = Math.abs(price * volatility * gaussianRandom() * 0.5);
-      const high = r2(Math.max(open, close) + spike1);
-      const low = r2(Math.max(1, Math.min(open, close) - spike2));
+      // High and low extend beyond open/close with proper wicks
+      const wickUp = Math.abs(price * volatility * gaussianRandom() * 0.6);
+      const wickDown = Math.abs(price * volatility * gaussianRandom() * 0.6);
+      const high = r2(Math.max(open, close) + wickUp);
+      const low = r2(Math.max(1, Math.min(open, close) - wickDown));
 
-      const volume = Math.floor(50000 + Math.random() * 500000);
+      const volume = Math.floor(baseVol * (0.5 + Math.random()));
 
       candles.push({
         date: new Date(timestamp).toISOString(),

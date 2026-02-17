@@ -19,6 +19,7 @@ import SocketManager from './services/socketManager.js';
 import quoteRouter from './routes/quote.js';
 import chartRouter from './routes/chart.js';
 import searchRouter from './routes/search.js';
+import tradingRouter from './routes/trading.js';
 
 // ─── Initialize ─────────────────────────────────────────────────────────────
 
@@ -47,13 +48,13 @@ app.use(
       'http://localhost:5174',
       'http://localhost:5175',
     ],
-    methods: ['GET'],
+    methods: ['GET', 'POST'],
   })
 );
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 200,
+  max: 1000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
@@ -67,6 +68,7 @@ app.use(express.json());
 app.use('/api/quote', quoteRouter);
 app.use('/api/chart', chartRouter);
 app.use('/api/search', searchRouter);
+app.use('/api/trading', tradingRouter);
 
 // Health check with system info
 app.get('/api/health', (_req, res) => {
