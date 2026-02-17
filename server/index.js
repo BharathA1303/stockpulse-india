@@ -24,6 +24,7 @@ import tradingRouter from './routes/trading.js';
 // ─── Initialize ─────────────────────────────────────────────────────────────
 
 const app = express();
+app.set('trust proxy', 1);
 const httpServer = createServer(app);
 const PORT = process.env.PORT || 5000;
 
