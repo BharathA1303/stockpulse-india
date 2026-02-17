@@ -1,6 +1,6 @@
 # StockPulse India 📈🇮🇳
 
-Real-time Indian stock market monitoring dashboard tracking **NSE** (National Stock Exchange) and **BSE** (Bombay Stock Exchange) listed companies.
+Real-time Indian stock market trading terminal built with **React**, **Node.js** & **Socket.IO**. Features live charts, order book, watchlist, and market depth tracking **NSE** (National Stock Exchange) and **BSE** (Bombay Stock Exchange) listed companies.
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-green)
@@ -14,14 +14,39 @@ Real-time Indian stock market monitoring dashboard tracking **NSE** (National St
 
 ## Features
 
-- 🔍 **Stock Search** — Debounced autocomplete filtered to NSE/BSE equities
-- 💰 **Real-Time Prices** — Current price in ₹ with Indian numbering (₹12,34,567)
-- 📊 **Interactive Charts** — 1D / 1W / 1M / 3M / 1Y historical data via Recharts
-- ⭐ **Watchlist** — Add/remove stocks, persisted in localStorage
-- 📉 **Market Summary** — NIFTY 50, SENSEX, BANK NIFTY at a glance
-- 🌙 **Dark Mode** — One-click theme toggle with smooth transitions
-- 📱 **Responsive Design** — Mobile-first, 375 px → 1440 px breakpoints
+### Core Trading
+- 🔍 **Stock Search** — Debounced autocomplete with AbortController for reliable results, filtered to NSE/BSE equities
+- 💰 **Real-Time Prices** — Live price updates via WebSocket with Indian numbering (₹12,34,567)
+- 📊 **Interactive Charts** — 1D / 1W / 1M / 3M / 1Y historical data via Recharts with multiple chart types
+- 📈 **Live Market Data** — Real-time ticker tape, top indices bar (NIFTY 50, SENSEX, BANK NIFTY), and market depth
+
+### Trading Engine
+- 💹 **Paper Trading** — Simulated trading engine with ₹10,00,000 starting balance
+- 📋 **Order Management** — Market & Limit orders with Buy/Sell, CNC/MIS product types
+- 🎯 **Stop Loss & Target** — Automated position closing on SL/Target triggers
+- 📊 **Position Tracking** — Open/closed positions with real-time P&L calculation
+- 🏦 **Account Management** — Balance tracking, margin calculation, add funds support
+- 💾 **SQLite Persistence** — All trading data persisted via better-sqlite3
+
+### Multi-Watchlist
+- ⭐ **Multiple Watchlists** — Create unlimited watchlists with custom names
+- ✏️ **Inline CRUD** — Rename, delete, and switch between watchlists in the sidebar
+- 🔎 **Inline Search** — Search and add stocks directly within each watchlist
+- 📝 **Auto-Naming** — Auto-assigns names (Watchlist 1, 2, 3…) when no name is provided
+- 💾 **Persistent Storage** — All watchlists saved to localStorage
+
+### Professional UI
+- 🖥️ **Professional Sidebar** — Icon rail with expandable drawer panels (Watchlist, Orders, Trades, Depth, Indices, Balance)
+- 📐 **Resizable Right Panel** — Drag-to-resize stock info panel with container queries for responsive content
+- 🏗️ **Responsive Layout** — Adaptive design from mobile (375px) to ultra-wide (1440px+) with tablet overlay support
+- 🌙 **Dark Mode** — One-click theme toggle with smooth CSS transitions
 - ♿ **Accessible** — Semantic HTML, ARIA labels, keyboard navigation
+
+### Real-Time Features
+- 🔌 **WebSocket Integration** — Socket.IO for live price ticks, order book updates, and market data streaming
+- 📡 **Market Simulator** — Server-side price simulation from CSV dataset with realistic tick generation
+- 📊 **Order Book** — Live bid/ask depth visualization
+- 📰 **Trades Ticker** — Real-time trade feed display
 
 ## Tech Stack
 
@@ -30,32 +55,42 @@ Real-time Indian stock market monitoring dashboard tracking **NSE** (National St
 | Frontend | React 18 + Vite | Fast HMR, modern ESM bundler |
 | Charts | Recharts | Declarative, responsive, React-native |
 | Backend | Node.js + Express | Lightweight API proxy |
+| Real-Time | Socket.IO | WebSocket for live price updates |
 | Data | yahoo-finance2 | Free Yahoo Finance wrapper, no API key |
-| Styling | CSS Custom Properties | Themeable, no runtime cost |
+| Database | better-sqlite3 | Fast SQLite for trading persistence |
+| Styling | CSS Custom Properties | Themeable, container queries, no runtime cost |
 | Testing | Vitest + Testing Library | Fast, Vite-native test runner |
 
 ## Folder Structure
 
 ```
 stockpulse-india/
-├── server/                  # Express API proxy
-│   ├── index.js             # Server entry
+├── server/                  # Express API + WebSocket server
+│   ├── index.js             # Server entry + Socket.IO setup
 │   ├── routes/
 │   │   ├── quote.js         # GET /api/quote/:symbol
 │   │   ├── chart.js         # GET /api/chart/:symbol?range=
-│   │   └── search.js        # GET /api/search/:query
+│   │   ├── search.js        # GET /api/search/:query
+│   │   └── trading.js       # Trading REST API (orders, positions, account)
+│   ├── services/
+│   │   ├── marketSimulator.js  # CSV-based price simulation engine
+│   │   ├── socketManager.js    # WebSocket event management
+│   │   └── tradingDB.js        # SQLite trading persistence layer
 │   └── utils/
 │       ├── cache.js          # In-memory TTL cache
 │       └── sanitize.js       # Input sanitisation helpers
 ├── client/                  # React + Vite frontend
 │   ├── src/
 │   │   ├── components/      # React UI components
-│   │   ├── hooks/           # Custom React hooks
+│   │   │   ├── panels/      # Sidebar drawer panels (Watchlist, Orders, Trades, etc.)
+│   │   │   └── trading/     # Trading components (OrderForm, PositionSummary, etc.)
+│   │   ├── hooks/           # Custom React hooks (useWebSocket, useTrading, etc.)
+│   │   ├── services/        # Client-side trading engine
 │   │   ├── utils/           # Formatters (INR, lakhs/crores)
-│   │   ├── constants/       # Stock symbols, indices
-│   │   ├── styles/          # CSS
+│   │   ├── constants/       # Stock symbols, market indices
+│   │   ├── styles/          # CSS with container queries
 │   │   ├── test/            # Vitest tests
-│   │   ├── App.jsx          # Root component
+│   │   ├── App.jsx          # Root component with responsive layouts
 │   │   └── main.jsx         # Entry point
 │   └── vite.config.js
 ├── package.json             # Root (dev scripts)
@@ -123,12 +158,38 @@ cd client && npm test
 
 All endpoints are prefixed with `/api`.
 
+### Market Data
+
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/quote/:symbol` | Current price quote. Auto-appends `.NS` if no exchange suffix. |
 | `GET` | `/api/chart/:symbol?range=` | Historical OHLCV data. Range: `1d`, `1w`, `1mo`, `3mo`, `1y` |
 | `GET` | `/api/search/:query` | Autocomplete search filtered to NSE (`.NS`) & BSE (`.BO`) |
 | `GET` | `/api/health` | Health check endpoint |
+
+### Trading
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/trading/account` | Account balance, margin, and P&L |
+| `GET` | `/api/trading/positions` | Open and closed positions |
+| `GET` | `/api/trading/orders` | Open and executed orders |
+| `POST` | `/api/trading/order` | Place a new order (Market/Limit, Buy/Sell) |
+| `POST` | `/api/trading/close/:id` | Close an open position |
+| `POST` | `/api/trading/cancel/:id` | Cancel a pending limit order |
+| `POST` | `/api/trading/check-triggers` | Check SL/Target triggers against live prices |
+| `POST` | `/api/trading/add-money` | Add funds to trading account |
+| `POST` | `/api/trading/reset` | Reset account to defaults (₹10,00,000) |
+
+### WebSocket Events
+
+| Event | Direction | Description |
+|-------|-----------|-------------|
+| `subscribe` | Client → Server | Subscribe to a stock symbol for live ticks |
+| `unsubscribe` | Client → Server | Unsubscribe from a stock symbol |
+| `liveTick` | Server → Client | Real-time price update for subscribed symbol |
+| `allTicks` | Server → Client | Batch tick updates for all active symbols |
+| `orderBook` | Server → Client | Live order book depth data |
 
 ### Symbol Convention
 
