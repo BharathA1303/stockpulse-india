@@ -6,7 +6,7 @@ import { POPULAR_STOCKS, API_BASE_URL } from '../constants/stockSymbols';
  * Clicking a stock selects it in the app.
  * Scroll speed is intentionally slow for readability.
  */
-export default function TickerTape({ allTicks = [], connected, requestAllQuotes, onSelectStock }) {
+export default function TickerTape({ allTicks = {}, connected, requestAllQuotes, onSelectStock }) {
   const [tickers, setTickers] = useState([]);
   const initialFetched = useRef(false);
 
@@ -46,10 +46,11 @@ export default function TickerTape({ allTicks = [], connected, requestAllQuotes,
     fetchInitial();
   }, []);
 
-  // Update from WebSocket ticks
+  // Update from WebSocket ticks (allTicks is an object keyed by symbol)
   useEffect(() => {
-    if (allTicks && allTicks.length > 0) {
-      setTickers(allTicks.map(t => ({
+    const tickArray = Object.values(allTicks);
+    if (tickArray.length > 0) {
+      setTickers(tickArray.map(t => ({
         symbol: (t.symbol || '').replace(/\.(NS|BO)$/, ''),
         fullSymbol: t.symbol,
         price: t.price,
@@ -87,7 +88,13 @@ export default function TickerTape({ allTicks = [], connected, requestAllQuotes,
                 ₹{t.price?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
               <span className={`ticker-change ${isUp ? 'up' : 'down'}`}>
-                {isUp ? '▲' : '▼'} {Math.abs(t.changePercent || 0).toFixed(2)}%
+                <svg className="change-arrow" width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+                  {isUp
+                    ? <path d="M5 1L9 7H1L5 1Z" />
+                    : <path d="M5 9L1 3H9L5 9Z" />
+                  }
+                </svg>
+                {Math.abs(t.changePercent || 0).toFixed(2)}%
               </span>
             </button>
           );

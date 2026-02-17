@@ -113,7 +113,18 @@ export default function LivePriceDisplay({ stockData, symbol, liveTick, isInWatc
     );
   }
 
-  // ── Full desktop/tablet view (header + price + stats + ranges + fundamentals) ──
+  // ── Full desktop/tablet view (header + price + stats + ranges + fundamentals + extras) ──
+
+  // Derived calculations
+  const vwap = stockData.volume > 0
+    ? ((stockData.dayHigh + stockData.dayLow + stockData.price) / 3)
+    : null;
+  const upperCircuit = stockData.previousClose ? stockData.previousClose * 1.20 : null;
+  const lowerCircuit = stockData.previousClose ? stockData.previousClose * 0.80 : null;
+  const avgTradePrice = stockData.volume > 0
+    ? ((stockData.open + stockData.price) / 2)
+    : null;
+
   return (
     <div className="live-price-panel">
       {/* Header */}
@@ -127,6 +138,15 @@ export default function LivePriceDisplay({ stockData, symbol, liveTick, isInWatc
               {stockData.marketState === 'REGULAR' ? 'LIVE' : 'CLOSED'}
             </span>
           </div>
+          {/* Sector & Industry */}
+          {stockData.sector && (
+            <div className="lp-sector-row">
+              <span className="lp-sector-tag">{stockData.sector}</span>
+              {stockData.industry && stockData.industry !== stockData.sector && (
+                <span className="lp-industry-tag">{stockData.industry}</span>
+              )}
+            </div>
+          )}
         </div>
         {onToggleWatchlist && (
           <button
@@ -145,13 +165,18 @@ export default function LivePriceDisplay({ stockData, symbol, liveTick, isInWatc
           {formatINR(stockData.price)}
         </span>
         <div className={`lp-change-block ${isUp ? 'up' : 'down'}`}>
-          <span className="lp-change-arrow">{isUp ? '▲' : '▼'}</span>
+          <svg className="change-arrow" width="14" height="14" viewBox="0 0 10 10" fill="currentColor">
+            {isUp
+              ? <path d="M5 1L9 7H1L5 1Z" />
+              : <path d="M5 9L1 3H9L5 9Z" />
+            }
+          </svg>
           <span className="lp-change-value">{formatChange(stockData.change)}</span>
           <span className="lp-change-pct">({formatPercent(stockData.changePercent)})</span>
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats Grid */}
       <div className="lp-stats-grid">
         <div className="lp-stat">
           <span className="lp-stat-label">Open</span>
@@ -176,6 +201,49 @@ export default function LivePriceDisplay({ stockData, symbol, liveTick, isInWatc
         <div className="lp-stat">
           <span className="lp-stat-label">Mkt Cap</span>
           <span className="lp-stat-value">₹{formatLargeShort(stockData.marketCap)}</span>
+        </div>
+      </div>
+
+      {/* Additional Trading Info */}
+      <div className="lp-trading-info">
+        <h4>Trading Info</h4>
+        <div className="lp-stats-grid">
+          {stockData.avgVolume != null && (
+            <div className="lp-stat">
+              <span className="lp-stat-label">Avg Volume</span>
+              <span className="lp-stat-value">{formatVolume(stockData.avgVolume)}</span>
+            </div>
+          )}
+          {vwap != null && (
+            <div className="lp-stat">
+              <span className="lp-stat-label">VWAP</span>
+              <span className="lp-stat-value">{formatINR(vwap)}</span>
+            </div>
+          )}
+          {avgTradePrice != null && (
+            <div className="lp-stat">
+              <span className="lp-stat-label">Avg Trade Price</span>
+              <span className="lp-stat-value">{formatINR(avgTradePrice)}</span>
+            </div>
+          )}
+          {stockData.beta != null && (
+            <div className="lp-stat">
+              <span className="lp-stat-label">Beta</span>
+              <span className="lp-stat-value">{Number(stockData.beta).toFixed(2)}</span>
+            </div>
+          )}
+          {upperCircuit != null && (
+            <div className="lp-stat">
+              <span className="lp-stat-label">Upper Circuit</span>
+              <span className="lp-stat-value green">{formatINR(upperCircuit)}</span>
+            </div>
+          )}
+          {lowerCircuit != null && (
+            <div className="lp-stat">
+              <span className="lp-stat-label">Lower Circuit</span>
+              <span className="lp-stat-value red">{formatINR(lowerCircuit)}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -210,25 +278,25 @@ export default function LivePriceDisplay({ stockData, symbol, liveTick, isInWatc
           <div className="lp-fund-grid">
             {stockData.peRatio != null && (
               <div className="lp-fund-item">
-                <span className="lp-fund-label">P/E</span>
+                <span className="lp-fund-label">P/E Ratio</span>
                 <span className="lp-fund-value">{Number(stockData.peRatio).toFixed(2)}</span>
               </div>
             )}
             {stockData.pbRatio != null && (
               <div className="lp-fund-item">
-                <span className="lp-fund-label">P/B</span>
+                <span className="lp-fund-label">P/B Ratio</span>
                 <span className="lp-fund-value">{Number(stockData.pbRatio).toFixed(2)}</span>
               </div>
             )}
             {stockData.eps != null && (
               <div className="lp-fund-item">
-                <span className="lp-fund-label">EPS</span>
+                <span className="lp-fund-label">EPS (TTM)</span>
                 <span className="lp-fund-value">₹{Number(stockData.eps).toFixed(2)}</span>
               </div>
             )}
             {stockData.bookValue != null && (
               <div className="lp-fund-item">
-                <span className="lp-fund-label">Book Val</span>
+                <span className="lp-fund-label">Book Value</span>
                 <span className="lp-fund-value">₹{Number(stockData.bookValue).toFixed(2)}</span>
               </div>
             )}
@@ -236,6 +304,12 @@ export default function LivePriceDisplay({ stockData, symbol, liveTick, isInWatc
               <div className="lp-fund-item">
                 <span className="lp-fund-label">Div Yield</span>
                 <span className="lp-fund-value">{(stockData.dividendYield * 100).toFixed(2)}%</span>
+              </div>
+            )}
+            {stockData.marketCap > 0 && stockData.eps > 0 && (
+              <div className="lp-fund-item">
+                <span className="lp-fund-label">Earning Yield</span>
+                <span className="lp-fund-value">{((stockData.eps / stockData.price) * 100).toFixed(2)}%</span>
               </div>
             )}
           </div>

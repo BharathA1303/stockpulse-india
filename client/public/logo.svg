@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="globeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00bcd4"/>
+      <stop offset="100%" stop-color="#0097a7"/>
+    </linearGradient>
+    <linearGradient id="barRed" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ef5350"/>
+      <stop offset="100%" stop-color="#c62828"/>
+    </linearGradient>
+    <linearGradient id="barYellow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffca28"/>
+      <stop offset="100%" stop-color="#f9a825"/>
+    </linearGradient>
+    <linearGradient id="barGreen" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#66bb6a"/>
+      <stop offset="100%" stop-color="#2e7d32"/>
+    </linearGradient>
+  </defs>
+  <!-- Globe -->
+  <circle cx="32" cy="32" r="28" fill="url(#globeGrad)" opacity="0.15"/>
+  <circle cx="32" cy="32" r="28" fill="none" stroke="url(#globeGrad)" stroke-width="2.5"/>
+  <!-- Globe grid lines -->
+  <ellipse cx="32" cy="32" rx="14" ry="28" fill="none" stroke="#00bcd4" stroke-width="1" opacity="0.3"/>
+  <ellipse cx="32" cy="32" rx="24" ry="28" fill="none" stroke="#00bcd4" stroke-width="0.8" opacity="0.2"/>
+  <line x1="4" y1="32" x2="60" y2="32" stroke="#00bcd4" stroke-width="0.8" opacity="0.3"/>
+  <line x1="32" y1="4" x2="32" y2="60" stroke="#00bcd4" stroke-width="0.8" opacity="0.3"/>
+  <!-- Bar chart bars -->
+  <rect x="16" y="34" width="7" height="18" rx="2" fill="url(#barRed)"/>
+  <rect x="28" y="26" width="7" height="26" rx="2" fill="url(#barYellow)"/>
+  <rect x="40" y="18" width="7" height="34" rx="2" fill="url(#barGreen)"/>
+  <!-- Upward arrow / trend line -->
+  <path d="M14 48 L22 38 L34 30 L46 16" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="46,16 40,18 44,22" fill="#fff"/>
+</svg>

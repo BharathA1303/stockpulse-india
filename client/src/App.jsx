@@ -2,13 +2,15 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import ErrorBoundary from './components/ErrorBoundary';
 import Header from './components/Header';
 import TickerTape from './components/TickerTape';
-import MarketSummary from './components/MarketSummary';
+import Sidebar from './components/Sidebar';
+import RightInfoPanel from './components/RightInfoPanel';
+import ResizablePanel from './components/ResizablePanel';
 import LivePriceDisplay from './components/LivePriceDisplay';
 import CustomChart from './components/CustomChart';
 import OrderBook from './components/OrderBook';
 import TradesTicker from './components/TradesTicker';
-import Watchlist from './components/Watchlist';
 import WatchlistSection from './components/WatchlistSection';
+import MarketSummary from './components/MarketSummary';
 import SearchAutocomplete from './components/SearchAutocomplete';
 import BottomNav from './components/BottomNav';
 import Drawer from './components/Drawer';
@@ -19,7 +21,25 @@ import { useWebSocket } from './hooks/useWebSocket';
 import { useStockData, useChartData } from './hooks/useStockData';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { useBreakpoint } from './hooks/useBreakpoint';
+import { useLiveMarketStore } from './hooks/useLiveMarketStore';
+import { useTrading } from './hooks/useTrading';
 import { POPULAR_STOCKS } from './constants/stockSymbols';
+
+// Build initial multi-watchlist data, migrating from old single-list format
+const INITIAL_WATCHLISTS = (() => {
+  try {
+    const existing = window.localStorage.getItem('sp-watchlists');
+    if (existing) return JSON.parse(existing);
+    const old = JSON.parse(window.localStorage.getItem('sp-watchlist') || '[]');
+    return {
+      lists: [{ id: 'wl-1', name: 'Watchlist 1', symbols: Array.isArray(old) ? old : [] }],
+      activeId: 'wl-1',
+      nextNum: 2,
+    };
+  } catch {
+    return { lists: [{ id: 'wl-1', name: 'Watchlist 1', symbols: [] }], activeId: 'wl-1', nextNum: 2 };
+  }
+})();
 
 const DEPTH_TRADES_TABS = [
   { id: 'depth', label: 'Depth' },
@@ -34,27 +54,23 @@ const INFO_TABS = [
 /**
  * Root application — Responsive trading terminal.
  * Mobile (<768): Stacked layout + bottom nav + drawers
- * Tablet (768-1023): Collapsible sidebar + chart + bottom panel
- * Desktop (1024+): 3-column terminal layout
+ * Tablet (768-1023): Sidebar overlay + chart + bottom panel
+ * Desktop (1024+): Sidebar + chart + right info panel
  */
 function AppInner() {
   const { isMobile, isTablet, isDesktop } = useBreakpoint();
   const toast = useToast();
 
   const [selectedSymbol, setSelectedSymbol] = useState('RELIANCE.NS');
-  const [watchlist, setWatchlist] = useLocalStorage('sp-watchlist', []);
+  const [watchlistData, setWatchlistData] = useLocalStorage('sp-watchlists', INITIAL_WATCHLISTS);
   const [darkMode, setDarkMode] = useLocalStorage('sp-dark-mode', true);
   const [activeTab, setActiveTab] = useState('depth');
   const [chartRange, setChartRange] = useState('1mo');
   const [isLive, setIsLive] = useState(true);
 
-  // Desktop sidebar
-  const [sidebarOpen, setSidebarOpen] = useLocalStorage('sp-sidebar-open', true);
-  const [sidebarWidth, setSidebarWidth] = useState(240);
-  const [isResizing, setIsResizing] = useState(false);
-  const [rightDividerDragging, setRightDividerDragging] = useState(false);
-  const [rightTopRatio, setRightTopRatio] = useState(0.45);
-  const rightSidebarRef = useRef(null);
+  // Professional sidebar state
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeSidebarTab, setActiveSidebarTab] = useState(null);
 
   // Mobile state
   const [mobileNavTab, setMobileNavTab] = useState('chart');
@@ -64,6 +80,32 @@ function AppInner() {
   const ws = useWebSocket();
   const { data: restStockData, loading } = useStockData(selectedSymbol);
   const { data: restChartData } = useChartData(selectedSymbol, chartRange);
+
+  // Centralized live price store from WebSocket
+  const { prices: livePrices } = useLiveMarketStore(ws);
+
+  // Trading engine
+  const trading = useTrading(livePrices);
+
+  // ── Multi-Watchlist derived state ──
+  const activeWatchlist = useMemo(() => {
+    return watchlistData.lists.find(l => l.id === watchlistData.activeId) || watchlistData.lists[0];
+  }, [watchlistData]);
+
+  // Flat array of active watchlist symbols (used for backward compat)
+  const watchlist = activeWatchlist?.symbols || [];
+
+  // All symbols across every watchlist (for star-button check)
+  const allWatchlistSymbols = useMemo(() => {
+    const symbols = new Set();
+    watchlistData.lists.forEach(l => l.symbols.forEach(s => symbols.add(s)));
+    return [...symbols];
+  }, [watchlistData]);
+
+  // Positions for currently selected symbol
+  const currentSymbolPositions = useMemo(() => {
+    return trading.openPositions.filter(p => p.symbol === selectedSymbol);
+  }, [trading.openPositions, selectedSymbol]);
 
   if (typeof document !== 'undefined') {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
@@ -86,37 +128,6 @@ function AppInner() {
       ws.requestChart(selectedSymbol, chartRange);
     }
   }, [selectedSymbol, ws.connected, chartRange]);
-
-  // Sidebar resize (desktop only)
-  useEffect(() => {
-    if (!isResizing || isMobile) return;
-    const onMove = (e) => setSidebarWidth(Math.max(180, Math.min(380, e.clientX)));
-    const onUp = () => { setIsResizing(false); document.body.style.cursor = ''; document.body.style.userSelect = ''; };
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-  }, [isResizing, isMobile]);
-
-  // Right panel divider resize (desktop only)
-  useEffect(() => {
-    if (!rightDividerDragging || isMobile) return;
-    const onMove = (e) => {
-      const sidebar = rightSidebarRef.current;
-      if (!sidebar) return;
-      const rect = sidebar.getBoundingClientRect();
-      const y = e.clientY - rect.top;
-      const ratio = Math.max(0.08, Math.min(0.92, y / rect.height));
-      setRightTopRatio(ratio);
-    };
-    const onUp = () => { setRightDividerDragging(false); document.body.style.cursor = ''; document.body.style.userSelect = ''; };
-    document.body.style.cursor = 'row-resize';
-    document.body.style.userSelect = 'none';
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-  }, [rightDividerDragging, isMobile]);
 
   // ── Freeze Depth/Trades when Live is OFF ──
   const frozenOrderBookRef = useRef(null);
@@ -184,22 +195,24 @@ function AppInner() {
     }));
   }, [ws.chartData, restChartData]);
 
-  // Accumulate live ticks into chart candles
-  const liveCandleRef = useRef({ candle: null, baseLen: 0 });
+  // Accumulate live ticks into chart candles using state for proper reactivity
+  const liveCandleRef = useRef({ candle: null, baseLen: 0, lastSymbol: null, lastRange: null });
 
   const chartCandles = useMemo(() => {
     if (!isLive || !ws.liveTick || ws.liveTick.symbol !== selectedSymbol || baseChartCandles.length === 0) {
-      liveCandleRef.current = { candle: null, baseLen: baseChartCandles.length };
+      liveCandleRef.current = { candle: null, baseLen: baseChartCandles.length, lastSymbol: selectedSymbol, lastRange: chartRange };
       return baseChartCandles;
     }
 
     const tick = ws.liveTick;
     const lc = liveCandleRef.current;
 
-    // Reset live candle tracking when base data changes
-    if (lc.baseLen !== baseChartCandles.length) {
+    // Reset live candle tracking when base data, symbol, or range changes
+    if (lc.baseLen !== baseChartCandles.length || lc.lastSymbol !== selectedSymbol || lc.lastRange !== chartRange) {
       lc.candle = null;
       lc.baseLen = baseChartCandles.length;
+      lc.lastSymbol = selectedSymbol;
+      lc.lastRange = chartRange;
     }
 
     const now = new Date();
@@ -212,7 +225,7 @@ function AppInner() {
     const currentBucket = Math.floor(now.getTime() / intervalMs) * intervalMs;
 
     if (!lc.candle || lc.candle._bucket !== currentBucket) {
-      // Start a new live candle
+      // Start a new live candle — don't mutate, create fresh
       lc.candle = {
         date: new Date(currentBucket).toISOString(),
         open: tick.price,
@@ -223,20 +236,34 @@ function AppInner() {
         _bucket: currentBucket,
       };
     } else {
-      // Update existing live candle
-      lc.candle.close = tick.price;
-      lc.candle.high = Math.max(lc.candle.high, tick.price);
-      lc.candle.low = Math.min(lc.candle.low, tick.price);
-      lc.candle.volume += (tick.lastTradeQty || 0);
+      // Update existing live candle — create a NEW object to avoid stale ref issues
+      lc.candle = {
+        ...lc.candle,
+        close: tick.price,
+        high: Math.max(lc.candle.high, tick.price),
+        low: Math.min(lc.candle.low, tick.price),
+        volume: lc.candle.volume + (tick.lastTradeQty || 0),
+      };
     }
+
+    // Build the final candle (strip internal _bucket key)
+    const { _bucket, ...liveCandle } = lc.candle;
 
     // If the live candle bucket is same as last base candle, update it; otherwise append
     if (currentBucket <= lastBaseTime) {
       const updated = [...baseChartCandles];
-      updated[updated.length - 1] = { ...updated[updated.length - 1], ...lc.candle, date: lastBase.date };
+      const lastCandle = updated[updated.length - 1];
+      updated[updated.length - 1] = {
+        ...lastCandle,
+        close: liveCandle.close,
+        high: Math.max(lastCandle.high, liveCandle.high),
+        low: Math.min(lastCandle.low, liveCandle.low),
+        volume: lastCandle.volume + (tick.lastTradeQty || 0),
+        date: lastBase.date,
+      };
       return updated;
     }
-    return [...baseChartCandles, { ...lc.candle }];
+    return [...baseChartCandles, liveCandle];
   }, [baseChartCandles, ws.liveTick, isLive, selectedSymbol, chartRange]);
 
   // ── Handlers ──────────────────────────────────────────
@@ -252,25 +279,112 @@ function AppInner() {
 
   const handleToggleDarkMode = useCallback(() => setDarkMode(prev => !prev), [setDarkMode]);
 
+  // ── Order placed handler: toast + auto-open orders panel ──
+  const handleOrderPlaced = useCallback((orderInfo) => {
+    const { side, quantity, stockName, price } = orderInfo;
+    toast.addToast(
+      `${side} order placed: ${quantity} × ${stockName} @ ${price?.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}`,
+      { type: 'success', duration: 4000 }
+    );
+    // Auto-open the orders panel in sidebar
+    setActiveSidebarTab('orders');
+    setSidebarOpen(true);
+  }, [toast, setActiveSidebarTab, setSidebarOpen]);
+
   const handleToggleWatchlist = useCallback((symbol) => {
     const name = symbol.replace(/\.(NS|BO)$/, '');
-    setWatchlist(prev => {
-      const exists = prev.includes(symbol);
-      if (!exists && window.innerWidth >= 1024) setSidebarOpen(true);
-      return exists ? prev.filter(s => s !== symbol) : [...prev, symbol];
-    });
-    // Toast OUTSIDE the state updater to avoid double-fire in StrictMode
-    const isCurrentlyInWatchlist = watchlist.includes(symbol);
-    if (isCurrentlyInWatchlist) {
-      toast.addToast(`${name} removed from Watchlist`, { type: 'info' });
-    } else {
-      toast.addToast(`${name} added to Watchlist`, { type: 'success' });
-    }
-  }, [setWatchlist, setSidebarOpen, toast, watchlist]);
+    const isInActive = activeWatchlist.symbols.includes(symbol);
 
-  const handleRemoveFromWatchlist = useCallback((symbol) => {
-    setWatchlist(prev => prev.filter(s => s !== symbol));
-  }, [setWatchlist]);
+    setWatchlistData(prev => {
+      const newLists = prev.lists.map(l => {
+        if (l.id === prev.activeId) {
+          return {
+            ...l,
+            symbols: isInActive
+              ? l.symbols.filter(s => s !== symbol)
+              : [...l.symbols, symbol],
+          };
+        }
+        return l;
+      });
+      return { ...prev, lists: newLists };
+    });
+
+    // Auto-open sidebar watchlist when adding a stock
+    if (!isInActive && window.innerWidth >= 768) {
+      setActiveSidebarTab('watchlist');
+      setSidebarOpen(true);
+    }
+
+    // Toast feedback
+    if (isInActive) {
+      toast.addToast(`${name} removed from ${activeWatchlist.name}`, { type: 'info' });
+    } else {
+      toast.addToast(`${name} added to ${activeWatchlist.name}`, { type: 'success' });
+    }
+  }, [setWatchlistData, toast, activeWatchlist, setSidebarOpen, setActiveSidebarTab]);
+
+  const handleRemoveFromWatchlist = useCallback((symbol, listId) => {
+    setWatchlistData(prev => {
+      const targetId = listId || prev.activeId;
+      const newLists = prev.lists.map(l => {
+        if (l.id === targetId) {
+          return { ...l, symbols: l.symbols.filter(s => s !== symbol) };
+        }
+        return l;
+      });
+      return { ...prev, lists: newLists };
+    });
+  }, [setWatchlistData]);
+
+  const handleAddToWatchlist = useCallback((symbol, listId) => {
+    setWatchlistData(prev => {
+      const targetId = listId || prev.activeId;
+      const newLists = prev.lists.map(l => {
+        if (l.id === targetId) {
+          if (l.symbols.includes(symbol)) return l;
+          return { ...l, symbols: [...l.symbols, symbol] };
+        }
+        return l;
+      });
+      return { ...prev, lists: newLists };
+    });
+    const name = symbol.replace(/\.(NS|BO)$/, '');
+    toast.addToast(`${name} added to watchlist`, { type: 'success' });
+  }, [setWatchlistData, toast]);
+
+  const handleCreateWatchlist = useCallback((name) => {
+    setWatchlistData(prev => {
+      const newId = `wl-${prev.nextNum}`;
+      const newName = name?.trim() || `Watchlist ${prev.nextNum}`;
+      return {
+        ...prev,
+        lists: [...prev.lists, { id: newId, name: newName, symbols: [] }],
+        activeId: newId,
+        nextNum: prev.nextNum + 1,
+      };
+    });
+  }, [setWatchlistData]);
+
+  const handleDeleteWatchlist = useCallback((listId) => {
+    setWatchlistData(prev => {
+      if (prev.lists.length <= 1) return prev;
+      const newLists = prev.lists.filter(l => l.id !== listId);
+      const newActiveId = prev.activeId === listId ? newLists[0].id : prev.activeId;
+      return { ...prev, lists: newLists, activeId: newActiveId };
+    });
+  }, [setWatchlistData]);
+
+  const handleRenameWatchlist = useCallback((listId, newName) => {
+    setWatchlistData(prev => ({
+      ...prev,
+      lists: prev.lists.map(l => l.id === listId ? { ...l, name: newName.trim() || l.name } : l),
+    }));
+  }, [setWatchlistData]);
+
+  const handleSetActiveWatchlist = useCallback((listId) => {
+    setWatchlistData(prev => ({ ...prev, activeId: listId }));
+  }, [setWatchlistData]);
 
   const handleRangeChange = useCallback((range) => {
     setChartRange(range);
@@ -310,6 +424,8 @@ function AppInner() {
     </div>
   );
 
+  // Order markers removed — no indicators on chart after order placement
+
   // ── Chart block (shared) ─────────────────────────────────
   const ChartBlock = selectedSymbol ? (
     <CustomChart
@@ -337,7 +453,8 @@ function AppInner() {
       <ErrorBoundary>
         <div className="app app-mobile">
           <Header onSelectStock={handleSelectStock} darkMode={darkMode} onToggleDarkMode={handleToggleDarkMode}
-            isMobile={true} onSearchOpen={() => setSearchDrawerOpen(true)} />
+            isMobile={true} onSearchOpen={() => setSearchDrawerOpen(true)}
+            livePrices={livePrices} />
           <TickerTape allTicks={ws.allTicks} connected={ws.connected} requestAllQuotes={ws.requestAllQuotes} onSelectStock={handleSelectStock} />
 
           <main className="mobile-main">
@@ -360,11 +477,16 @@ function AppInner() {
             {/* ── Watchlist — FULL SCREEN SECTION, NOT popup/drawer ── */}
             {mobileNavTab === 'watchlist' && (
               <WatchlistSection
-                watchlist={watchlist}
+                watchlistData={watchlistData}
                 onRemove={handleRemoveFromWatchlist}
+                onAdd={handleAddToWatchlist}
                 onSelect={handleSelectStock}
                 selectedSymbol={selectedSymbol}
                 allTicks={ws.allTicks}
+                onCreateWatchlist={handleCreateWatchlist}
+                onDeleteWatchlist={handleDeleteWatchlist}
+                onRenameWatchlist={handleRenameWatchlist}
+                onSetActiveWatchlist={handleSetActiveWatchlist}
               />
             )}
 
@@ -402,13 +524,13 @@ function AppInner() {
                 <MobileTabs tabs={INFO_TABS} activeTab={mobileContentTab} onTabChange={setMobileContentTab} />
                 <div className="mobile-tab-content">
                   {mobileContentTab === 'overview' && (
-                    <LivePriceDisplay stockData={stockData} symbol={selectedSymbol} liveTick={ws.liveTick}
+                    <LivePriceDisplay key={selectedSymbol} stockData={stockData} symbol={selectedSymbol} liveTick={ws.liveTick}
                       isInWatchlist={watchlist.includes(selectedSymbol)}
                       onToggleWatchlist={() => handleToggleWatchlist(selectedSymbol)} compact={true} />
                   )}
                   {mobileContentTab === 'fundamentals' && stockData && (
                     <div className="mobile-fundamentals">
-                      <LivePriceDisplay stockData={stockData} symbol={selectedSymbol} liveTick={ws.liveTick}
+                      <LivePriceDisplay key={`${selectedSymbol}-fund`} stockData={stockData} symbol={selectedSymbol} liveTick={ws.liveTick}
                         isInWatchlist={watchlist.includes(selectedSymbol)}
                         onToggleWatchlist={() => handleToggleWatchlist(selectedSymbol)} showOnlyFundamentals={true} />
                     </div>
@@ -448,28 +570,53 @@ function AppInner() {
   if (isTablet) {
     return (
       <ErrorBoundary>
-        <div className="app app-tablet">
+        <div className="app app-tablet terminal-layout">
           <TickerTape allTicks={ws.allTicks} connected={ws.connected} requestAllQuotes={ws.requestAllQuotes} onSelectStock={handleSelectStock} />
-          <Header onSelectStock={handleSelectStock} darkMode={darkMode} onToggleDarkMode={handleToggleDarkMode} />
-          <MarketSummary onSelectIndex={handleSelectStock} compact />
+          <Header onSelectStock={handleSelectStock} darkMode={darkMode} onToggleDarkMode={handleToggleDarkMode}
+            livePrices={livePrices} />
 
-          <div className="tablet-body">
-            <aside className={`tablet-sidebar-left ${sidebarOpen ? 'open' : 'collapsed'}`}>
-              <button className="sidebar-toggle" onClick={() => setSidebarOpen(prev => !prev)}
-                aria-label={sidebarOpen ? 'Hide watchlist' : 'Show watchlist'}>
-                {sidebarOpen ? '◂' : '▸'}
-              </button>
-              {sidebarOpen && (
-                <Watchlist watchlist={watchlist} onRemove={handleRemoveFromWatchlist}
-                  onSelect={handleSelectStock} selectedSymbol={selectedSymbol} allTicks={ws.allTicks} />
-              )}
-            </aside>
+          <div className="layout-wrapper">
+            {/* Sidebar overlay on tablet */}
+            <Sidebar
+              open={sidebarOpen}
+              activeTab={activeSidebarTab}
+              setActiveTab={setActiveSidebarTab}
+              setOpen={setSidebarOpen}
+              watchlistData={watchlistData}
+              onRemoveFromWatchlist={handleRemoveFromWatchlist}
+              onAddToWatchlist={handleAddToWatchlist}
+              onSelectStock={handleSelectStock}
+              selectedSymbol={selectedSymbol}
+              allTicks={ws.allTicks}
+              onCreateWatchlist={handleCreateWatchlist}
+              onDeleteWatchlist={handleDeleteWatchlist}
+              onRenameWatchlist={handleRenameWatchlist}
+              onSetActiveWatchlist={handleSetActiveWatchlist}
+              orderBook={displayOrderBook}
+              currentPrice={stockData?.price}
+              symbol={selectedSymbol}
+              newTrades={displayNewTrades}
+              openPositions={trading.openPositions}
+              closedPositions={trading.closedPositions}
+              openOrders={trading.openOrders}
+              executedOrders={trading.executedOrders}
+              livePrices={livePrices}
+              onClosePosition={trading.closePosition}
+              onCancelOrder={trading.cancelOrder}
+              balance={trading.balance}
+              usedMargin={trading.usedMargin}
+              realisedPnL={trading.realisedPnL}
+              unrealisedPnL={trading.unrealisedPnL}
+              onResetAccount={trading.resetAccount}
+              onAddMoney={trading.addMoney}
+            />
 
-            <div className="tablet-center">
+            <div className="chart-section">
               {selectedSymbol ? ChartBlock : WelcomeBlock}
             </div>
           </div>
 
+          {/* Tablet bottom panel for stock info */}
           {selectedSymbol && (
             <div className="tablet-bottom-panel">
               <div className="tablet-bottom-tabs">
@@ -479,7 +626,7 @@ function AppInner() {
               </div>
               <div className="tablet-bottom-content">
                 {activeTab === 'price' && (
-                  <LivePriceDisplay stockData={stockData} symbol={selectedSymbol} liveTick={ws.liveTick}
+                  <LivePriceDisplay key={selectedSymbol} stockData={stockData} symbol={selectedSymbol} liveTick={ws.liveTick}
                     isInWatchlist={watchlist.includes(selectedSymbol)}
                     onToggleWatchlist={() => handleToggleWatchlist(selectedSymbol)} />
                 )}
@@ -502,68 +649,73 @@ function AppInner() {
     <ErrorBoundary>
       <div className="app app-desktop terminal-layout">
         <TickerTape allTicks={ws.allTicks} connected={ws.connected} requestAllQuotes={ws.requestAllQuotes} onSelectStock={handleSelectStock} />
-        <Header onSelectStock={handleSelectStock} darkMode={darkMode} onToggleDarkMode={handleToggleDarkMode} />
-        <MarketSummary onSelectIndex={handleSelectStock} compact />
+        <Header onSelectStock={handleSelectStock} darkMode={darkMode} onToggleDarkMode={handleToggleDarkMode}
+          livePrices={livePrices} />
 
-        <div className="terminal-body">
-          {/* LEFT — Watchlist */}
-          <aside
-            className={`terminal-sidebar-left ${sidebarOpen ? 'open' : 'collapsed'}`}
-            style={sidebarOpen ? { width: sidebarWidth + 'px', minWidth: sidebarWidth + 'px' } : undefined}
-          >
-            <button className="sidebar-toggle" onClick={() => setSidebarOpen(prev => !prev)}
-              aria-label={sidebarOpen ? 'Hide watchlist' : 'Show watchlist'}
-              title={sidebarOpen ? 'Hide watchlist' : 'Show watchlist'}>
-              {sidebarOpen ? '◂' : '▸'}
-            </button>
-            {!sidebarOpen && <span className="sidebar-collapsed-label">WATCHLIST</span>}
-            {sidebarOpen && (
-              <Watchlist watchlist={watchlist} onRemove={handleRemoveFromWatchlist}
-                onSelect={handleSelectStock} selectedSymbol={selectedSymbol} allTicks={ws.allTicks} />
-            )}
-            {sidebarOpen && (
-              <div className="sidebar-resize-handle" onMouseDown={(e) => { e.preventDefault(); setIsResizing(true); }} />
-            )}
-          </aside>
+        <div className="layout-wrapper">
+          {/* LEFT — Professional Sidebar */}
+          <Sidebar
+            open={sidebarOpen}
+            activeTab={activeSidebarTab}
+            setActiveTab={setActiveSidebarTab}
+            setOpen={setSidebarOpen}
+            watchlistData={watchlistData}
+            onRemoveFromWatchlist={handleRemoveFromWatchlist}
+            onAddToWatchlist={handleAddToWatchlist}
+            onSelectStock={handleSelectStock}
+            selectedSymbol={selectedSymbol}
+            allTicks={ws.allTicks}
+            onCreateWatchlist={handleCreateWatchlist}
+            onDeleteWatchlist={handleDeleteWatchlist}
+            onRenameWatchlist={handleRenameWatchlist}
+            onSetActiveWatchlist={handleSetActiveWatchlist}
+            orderBook={displayOrderBook}
+            currentPrice={stockData?.price}
+            symbol={selectedSymbol}
+            newTrades={displayNewTrades}
+            openPositions={trading.openPositions}
+            closedPositions={trading.closedPositions}
+            openOrders={trading.openOrders}
+            executedOrders={trading.executedOrders}
+            livePrices={livePrices}
+            onClosePosition={trading.closePosition}
+            onCancelOrder={trading.cancelOrder}
+            balance={trading.balance}
+            usedMargin={trading.usedMargin}
+            realisedPnL={trading.realisedPnL}
+            unrealisedPnL={trading.unrealisedPnL}
+            onResetAccount={trading.resetAccount}
+            onAddMoney={trading.addMoney}
+          />
 
-          {/* CENTER */}
-          <div className="terminal-center">
+          {/* CENTER — Chart */}
+          <div className="chart-section">
             {selectedSymbol ? ChartBlock : WelcomeBlock}
           </div>
 
-          {/* RIGHT — Price + Depth/Trades */}
-          {selectedSymbol && (
-            <aside className="terminal-sidebar-right" ref={rightSidebarRef}>
-              <div className="right-panel-price" style={{ flex: `0 0 ${rightTopRatio * 100}%` }}>
-                {loading && !stockData ? (
-                  <div className="stock-card skeleton" aria-busy="true">
-                    <div className="skeleton-line skeleton-title" />
-                    <div className="skeleton-line skeleton-price" />
-                    <div className="skeleton-line skeleton-meta" />
-                  </div>
-                ) : (
-                  <LivePriceDisplay stockData={stockData} symbol={selectedSymbol} liveTick={ws.liveTick}
-                    isInWatchlist={watchlist.includes(selectedSymbol)}
-                    onToggleWatchlist={() => handleToggleWatchlist(selectedSymbol)} />
-                )}
-              </div>
-
-              <div className="right-panel-divider" onMouseDown={(e) => { e.preventDefault(); setRightDividerDragging(true); }}>
-                <div className="right-panel-divider-line" />
-              </div>
-
-              <div className="right-panel-bottom" style={{ flex: `0 0 ${(1 - rightTopRatio) * 100}%` }}>
-                <div className="bottom-panel-tabs">
-                  <button className={`panel-tab ${activeTab === 'depth' ? 'active' : ''}`} onClick={() => setActiveTab('depth')}>Depth</button>
-                  <button className={`panel-tab ${activeTab === 'trades' ? 'active' : ''}`} onClick={() => setActiveTab('trades')}>Trades</button>
-                </div>
-                <div className="bottom-panel-content">
-                  {activeTab === 'depth' && <OrderBook orderBook={displayOrderBook} currentPrice={stockData?.price} symbol={selectedSymbol} />}
-                  {activeTab === 'trades' && <TradesTicker newTrades={displayNewTrades} currentPrice={stockData?.price} symbol={selectedSymbol} />}
-                </div>
-              </div>
-            </aside>
-          )}
+          {/* RIGHT — Resizable Stock Info + Trading Panel */}
+          <ResizablePanel
+            defaultWidth={340}
+            minWidth={280}
+            maxWidth={520}
+            storageKey="sp-right-panel-width"
+            className="right-panel-resizable"
+          >
+            <RightInfoPanel
+              key={selectedSymbol}
+              stockData={stockData}
+              symbol={selectedSymbol}
+              liveTick={ws.liveTick}
+              isInWatchlist={watchlist.includes(selectedSymbol)}
+              onToggleWatchlist={() => handleToggleWatchlist(selectedSymbol)}
+              loading={loading}
+              onPlaceOrder={trading.placeOrder}
+              onOrderPlaced={handleOrderPlaced}
+              positions={currentSymbolPositions}
+              livePrices={livePrices}
+              onClosePosition={trading.closePosition}
+            />
+          </ResizablePanel>
         </div>
 
         {WsStatus}

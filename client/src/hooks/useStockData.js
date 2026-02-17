@@ -12,6 +12,12 @@ export function useStockData(symbol) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Clear stale data immediately when symbol changes
+  useEffect(() => {
+    setData(null);
+    setError(null);
+  }, [symbol]);
+
   const fetchQuote = useCallback(async () => {
     if (!symbol) return;
     setLoading(true);

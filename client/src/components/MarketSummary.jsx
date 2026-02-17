@@ -78,7 +78,12 @@ export default function MarketSummary({ onSelectIndex, compact = false }) {
               {typeof idx.price === 'number' ? idx.price.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—'}
             </span>
             <span className="chip-change">
-              {idx.change >= 0 ? '▲' : '▼'}{' '}
+              <svg className="change-arrow" width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+                {idx.change >= 0
+                  ? <path d="M5 1L9 7H1L5 1Z" />
+                  : <path d="M5 9L1 3H9L5 9Z" />
+                }
+              </svg>
               {Math.abs(idx.change).toFixed(2)} ({Math.abs(idx.changePercent).toFixed(2)}%)
             </span>
           </div>
@@ -108,7 +113,12 @@ export default function MarketSummary({ onSelectIndex, compact = false }) {
                 : '—'}
             </div>
             <div className={`index-change ${idx.change >= 0 ? 'up' : 'down'}`}>
-              {idx.change >= 0 ? '▲' : '▼'}{' '}
+              <svg className="change-arrow" width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+                {idx.change >= 0
+                  ? <path d="M5 1L9 7H1L5 1Z" />
+                  : <path d="M5 9L1 3H9L5 9Z" />
+                }
+              </svg>
               {Math.abs(idx.change).toFixed(2)} ({Math.abs(idx.changePercent).toFixed(2)}%)
             </div>
           </div>

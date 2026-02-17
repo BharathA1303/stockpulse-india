@@ -37,19 +37,27 @@ const MIN_CW = 3;
 const MAX_CW = 28;
 
 const TIME_RANGES = [
-  { label: '1m', value: '1m' },
-  { label: '5m', value: '5m' },
-  { label: '1D', value: '1d' },
-  { label: '1W', value: '1w' },
-  { label: '1M', value: '1mo' },
-  { label: '3M', value: '3mo' },
-  { label: '1Y', value: '1y' },
+  { label: '1m', value: '1m', group: 'MINUTES' },
+  { label: '2m', value: '2m', group: 'MINUTES' },
+  { label: '3m', value: '3m', group: 'MINUTES' },
+  { label: '5m', value: '5m', group: 'MINUTES' },
+  { label: '10m', value: '10m', group: 'MINUTES' },
+  { label: '15m', value: '15m', group: 'MINUTES' },
+  { label: '30m', value: '30m', group: 'MINUTES' },
+  { label: '1h', value: '1h', group: 'HOURS' },
+  { label: '4h', value: '4h', group: 'HOURS' },
+  { label: '1D', value: '1d', group: 'DAYS' },
+  { label: '1W', value: '1w', group: 'DAYS' },
+  { label: '1M', value: '1mo', group: 'DAYS' },
+  { label: '3M', value: '3mo', group: 'DAYS' },
+  { label: '1Y', value: '1y', group: 'DAYS' },
 ];
 
 // ── Component ────────────────────────────────────────────────
 function CustomChartInner({
   candles = [], chartType = 'candle', currentPrice, symbol,
   range, onRangeChange, isLive, onToggleLive, stockName, exchange,
+
 }) {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
@@ -62,20 +70,37 @@ function CustomChartInner({
     isDragging: false, dragStartX: 0, dragVisibleStart: 0,
     width: 800, height: 400, dpr: 1, lastTouchDist: 0,
     currentPrice: null,
+
   });
 
   const [internalChartType, setInternalChartType] = useState(chartType);
   const [cursorStyle, setCursorStyle] = useState('crosshair');
+  const [timeDropdownOpen, setTimeDropdownOpen] = useState(false);
+  const timeDropdownRef = useRef(null);
   useEffect(() => { setInternalChartType(chartType); }, [chartType]);
   useEffect(() => { chartTypeRef.current = internalChartType; }, [internalChartType]);
 
+  // Close time dropdown on click outside
+  useEffect(() => {
+    if (!timeDropdownOpen) return;
+    const handler = (e) => {
+      if (timeDropdownRef.current && !timeDropdownRef.current.contains(e.target)) {
+        setTimeDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [timeDropdownOpen]);
+
   // ── Update candle data — only reset viewport on full data change, not live updates ───
   const prevCandleLenRef = useRef(0);
+  const prevCandleLastCloseRef = useRef(null);
   useEffect(() => {
     const s = S.current;
     const prevLen = prevCandleLenRef.current;
     s.candles = candles;
     if (candles.length > 0) {
+      const lastClose = candles[candles.length - 1]?.close;
       // Only reset viewport when data fundamentally changes (e.g. range switch, symbol change)
       // NOT when a single candle is appended/updated from live feed
       const isLiveUpdate = candles.length >= prevLen && candles.length <= prevLen + 1 && prevLen > 0;
@@ -89,6 +114,7 @@ function CustomChartInner({
           s.visibleEnd = candles.length;
         }
       }
+      prevCandleLastCloseRef.current = lastClose;
     }
     prevCandleLenRef.current = candles.length;
     scheduleDraw();
@@ -99,6 +125,8 @@ function CustomChartInner({
     S.current.currentPrice = currentPrice;
     scheduleDraw();
   }, [currentPrice]);
+
+
 
   // ── Canvas + resize observer ───
   useEffect(() => {
@@ -296,6 +324,8 @@ function CustomChartInner({
       ctx.fillText(lbl, cR + 6, y + 4);
     }
 
+
+
     // ── Crosshair ──
     const mx = s.crosshairX, my = s.crosshairY;
     if (mx >= cL && mx <= cR && my >= cT && my <= cB) {
@@ -429,10 +459,53 @@ function CustomChartInner({
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="1,12 5,7 9,9 15,3"/></svg>
             </button>
           </div>
-          <div className="time-range-buttons" role="group">
-            {TIME_RANGES.map(tr => (
-              <button key={tr.value} className={`time-btn ${range === tr.value ? 'active' : ''}`} onClick={() => onRangeChange?.(tr.value)}>{tr.label}</button>
-            ))}
+
+          {/* Time Range Dropdown */}
+          <div className="time-range-dropdown" ref={timeDropdownRef}>
+            <button
+              className="time-range-trigger"
+              onClick={() => setTimeDropdownOpen(prev => !prev)}
+            >
+              {TIME_RANGES.find(tr => tr.value === range)?.label || range}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <polyline points={timeDropdownOpen ? "18 15 12 9 6 15" : "6 9 12 15 18 9"} />
+              </svg>
+            </button>
+            {timeDropdownOpen && (
+              <div className="time-range-menu">
+                {['MINUTES', 'HOURS', 'DAYS'].map(group => {
+                  const items = TIME_RANGES.filter(tr => tr.group === group);
+                  if (items.length === 0) return null;
+                  return (
+                    <div key={group} className="time-range-group">
+                      <div className="time-range-group-label">{group}</div>
+                      {items.map(tr => (
+                        <button
+                          key={tr.value}
+                          className={`time-range-option ${range === tr.value ? 'active' : ''}`}
+                          onClick={() => { onRangeChange?.(tr.value); setTimeDropdownOpen(false); }}
+                        >
+                          {tr.label === '1m' ? '1 minute' :
+                           tr.label === '2m' ? '2 minutes' :
+                           tr.label === '3m' ? '3 minutes' :
+                           tr.label === '5m' ? '5 minutes' :
+                           tr.label === '10m' ? '10 minutes' :
+                           tr.label === '15m' ? '15 minutes' :
+                           tr.label === '30m' ? '30 minutes' :
+                           tr.label === '1h' ? '1 hour' :
+                           tr.label === '4h' ? '4 hours' :
+                           tr.label === '1D' ? '1 day' :
+                           tr.label === '1W' ? '1 week' :
+                           tr.label === '1M' ? '1 month' :
+                           tr.label === '3M' ? '3 months' :
+                           tr.label === '1Y' ? '1 year' : tr.label}
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
         <div className="chart-toolbar-right">

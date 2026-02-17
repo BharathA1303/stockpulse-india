@@ -33,7 +33,15 @@ function MobileStockCard({ stockData, symbol, isInWatchlist, onToggleWatchlist }
         <div className="msc-price-block">
           <span className="msc-price">{formatINR(stockData.price)}</span>
           <div className={`msc-change ${isUp ? 'up' : 'down'}`}>
-            <span>{isUp ? '▲' : '▼'} {formatChange(stockData.change)} ({formatPercent(stockData.changePercent)})</span>
+            <span className="msc-change-content">
+              <svg className="change-arrow" width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+                {isUp
+                  ? <path d="M5 1L9 7H1L5 1Z" />
+                  : <path d="M5 9L1 3H9L5 9Z" />
+                }
+              </svg>
+              {formatChange(stockData.change)} ({formatPercent(stockData.changePercent)})
+            </span>
           </div>
         </div>
       </div>

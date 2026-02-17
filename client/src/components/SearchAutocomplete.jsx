@@ -1,20 +1,23 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useDebounce } from '../hooks/useDebounce';
-import { useStockSearch } from '../hooks/useStockData';
+import { API_BASE_URL } from '../constants/stockSymbols';
 
 /**
  * Search bar with debounced autocomplete dropdown.
  * Filters to NSE/BSE stocks only.
+ * Uses direct fetch instead of hook to avoid stale-closure/re-render issues.
  *
  * @param {{ onSelect: (symbol: string) => void }} props
  */
 export default function SearchAutocomplete({ onSelect }) {
   const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [highlightIndex, setHighlightIndex] = useState(-1);
-  const debouncedQuery = useDebounce(query, 300);
-  const { results, loading } = useStockSearch(debouncedQuery);
+  const debouncedQuery = useDebounce(query, 250);
   const wrapperRef = useRef(null);
+  const abortRef = useRef(null);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -27,19 +30,58 @@ export default function SearchAutocomplete({ onSelect }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Open dropdown when results change
+  // Fetch search results when debounced query changes
   useEffect(() => {
-    if (results.length > 0 && query.length > 0) {
-      setIsOpen(true);
-      setHighlightIndex(-1);
+    if (!debouncedQuery || debouncedQuery.trim().length < 1) {
+      setResults([]);
+      setIsOpen(false);
+      return;
     }
-  }, [results, query]);
 
-  const handleSelect = (symbol) => {
+    // Abort previous request
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    let cancelled = false;
+    const doSearch = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(
+          `${API_BASE_URL}/api/search/${encodeURIComponent(debouncedQuery.trim())}`,
+          { signal: controller.signal }
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        if (!cancelled) {
+          setResults(json);
+          if (json.length > 0) {
+            setIsOpen(true);
+            setHighlightIndex(-1);
+          }
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError' && !cancelled) {
+          setResults([]);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    doSearch();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [debouncedQuery]);
+
+  const handleSelect = useCallback((symbol) => {
     setQuery('');
+    setResults([]);
     setIsOpen(false);
     onSelect(symbol);
-  };
+  }, [onSelect]);
 
   const handleKeyDown = (e) => {
     if (!isOpen || results.length === 0) return;
@@ -57,6 +99,8 @@ export default function SearchAutocomplete({ onSelect }) {
         e.preventDefault();
         if (highlightIndex >= 0 && results[highlightIndex]) {
           handleSelect(results[highlightIndex].symbol);
+        } else if (results.length > 0) {
+          handleSelect(results[0].symbol);
         }
         break;
       case 'Escape':
@@ -66,6 +110,15 @@ export default function SearchAutocomplete({ onSelect }) {
         break;
     }
   };
+
+  const handleChange = useCallback((e) => {
+    const val = e.target.value;
+    setQuery(val);
+    if (val.length === 0) {
+      setResults([]);
+      setIsOpen(false);
+    }
+  }, []);
 
   return (
     <div className="search-autocomplete" ref={wrapperRef} role="combobox" aria-expanded={isOpen}>
@@ -77,8 +130,8 @@ export default function SearchAutocomplete({ onSelect }) {
         <input
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => results.length > 0 && setIsOpen(true)}
+          onChange={handleChange}
+          onFocus={() => results.length > 0 && query.length > 0 && setIsOpen(true)}
           onKeyDown={handleKeyDown}
           placeholder="Search stocks… e.g. Reliance, TCS, INFY"
           aria-label="Search Indian stocks"

@@ -27,7 +27,7 @@ export function useWebSocket() {
   const socketRef = useRef(null);
   const [connected, setConnected] = useState(false);
   const [liveTick, setLiveTick] = useState(null);
-  const [allTicks, setAllTicks] = useState([]);
+  const [allTicks, setAllTicks] = useState({});
   const [orderBook, setOrderBook] = useState(null);
   const [newTrades, setNewTrades] = useState(null);
   const [chartData, setChartData] = useState(null);
@@ -63,9 +63,17 @@ export function useWebSocket() {
       setLiveTick(data);
     });
 
-    // All ticks for ticker tape
+    // All ticks for ticker tape — convert array to map keyed by symbol
     socket.on('tick:all', (data) => {
-      setAllTicks(data);
+      if (Array.isArray(data)) {
+        const tickMap = {};
+        for (const t of data) {
+          if (t.symbol) tickMap[t.symbol] = t;
+        }
+        setAllTicks(tickMap);
+      } else {
+        setAllTicks(data || {});
+      }
     });
 
     // Order book updates

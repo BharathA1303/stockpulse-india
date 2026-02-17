@@ -75,7 +75,12 @@ export default function StockCard({ data, loading, error, onAddToWatchlist, isIn
       <div className="stock-price-section">
         <span className="stock-price">{formatINR(data.price)}</span>
         <span className={`stock-change ${isUp ? 'up' : 'down'}`}>
-          <span className="stock-change-arrow">{isUp ? '▲' : '▼'}</span>
+          <svg className="change-arrow" width="12" height="12" viewBox="0 0 10 10" fill="currentColor">
+            {isUp
+              ? <path d="M5 1L9 7H1L5 1Z" />
+              : <path d="M5 9L1 3H9L5 9Z" />
+            }
+          </svg>
           {formatChange(data.change)} ({formatPercent(data.changePercent)})
         </span>
       </div>
