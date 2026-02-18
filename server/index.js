@@ -13,7 +13,6 @@ import express from 'express';
 import { createServer } from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import MarketSimulator from './services/marketSimulator.js';
 import SocketManager from './services/socketManager.js';
 import quoteRouter from './routes/quote.js';
@@ -58,18 +57,6 @@ app.use(
     methods: ['GET', 'POST'],
   })
 );
-
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 1000,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many requests, please try again later.' },
-  // Disable all validation — prevents ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
-  // behind reverse proxies (Render, Railway, etc.)
-  validate: false,
-});
-app.use('/api/', limiter);
 
 app.use(express.json());
 
