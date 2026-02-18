@@ -3826,10 +3826,6 @@ ul, ol { list-style: none; }
 .right-info-scroll > section {
   flex-shrink: 0;
 }
-/* Fundamentals section (last child) stretches to fill remaining space */
-.rip-fundamentals-section {
-  flex: 1;
-}
 
 /* ========== CHART SECTION ========== */
 .chart-section {
@@ -4224,11 +4220,8 @@ ul, ol { list-style: none; }
 
 /* ── RIP Fundamentals ── */
 .rip-fundamentals-section {
-  padding: 12px 14px 16px;
+  padding: 10px 14px 16px;
   border-top: 1px solid var(--border-light);
-  flex: 1;
-  display: flex;
-  flex-direction: column;
 }
 .rip-section-title {
   font-size: 11px;
@@ -4242,8 +4235,6 @@ ul, ol { list-style: none; }
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
-  flex: 1;
-  align-content: start;
 }
 .rip-fund-item {
   display: flex;
@@ -4260,6 +4251,95 @@ ul, ol { list-style: none; }
   font-weight: 600;
 }
 .rip-fund-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* ── RIP Range Bars (Day Range, 52-Week) ── */
+.rip-range-section {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-light);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rip-range-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rip-range-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.rip-range-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.rip-range-values {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.rip-range-bar {
+  position: relative;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-elevated);
+  overflow: visible;
+}
+.rip-range-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--color-down), var(--color-up));
+  transition: width 0.3s ease;
+}
+.rip-range-marker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-secondary);
+  box-shadow: 0 0 0 1px var(--accent);
+  transition: left 0.3s ease;
+}
+
+/* ── RIP Key Stats ── */
+.rip-stats-section {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-light);
+}
+.rip-stats-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.rip-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+.rip-stat-row:last-child {
+  border-bottom: none;
+}
+.rip-stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.rip-stat-value {
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 700;
@@ -5218,3 +5298,63 @@ ul, ol { list-style: none; }
 .lp-trading-info .lp-stat-item {
   padding: 5px 8px;
 }
+
+/* ===================================================================
+   TOP INDICES BAR — Compact scrollable horizontal bar
+   =================================================================== */
+.top-indices-bar {
+  display: flex;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  flex-wrap: nowrap;
+}
+.top-indices-bar::-webkit-scrollbar { display: none; }
+.top-index-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-family: var(--font-sans);
+  transition: background 0.15s, border-color 0.15s;
+}
+.top-index-chip:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
+}
+.top-index-chip.up { border-left: 3px solid var(--color-up); }
+.top-index-chip.down { border-left: 3px solid var(--color-down); }
+.top-index-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+}
+.top-index-price {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-bright);
+  font-family: var(--font-mono);
+}
+.top-index-change {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-mono);
+}
+.top-index-chip.up .top-index-change { color: var(--color-up); }
+.top-index-chip.down .top-index-change { color: var(--color-down); }
+.top-index-pct { font-size: 10px; opacity: 0.85; }
+.change-arrow { flex-shrink: 0; }

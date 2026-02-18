@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import Header from './components/Header';
 import TickerTape from './components/TickerTape';
@@ -16,13 +17,21 @@ import BottomNav from './components/BottomNav';
 import Drawer from './components/Drawer';
 import MobileTabs from './components/MobileTabs';
 import MobileStockCard from './components/MobileStockCard';
+import OrderForm from './components/trading/OrderForm';
+import BalancePanel from './components/panels/BalancePanel';
+import OrdersPanel from './components/panels/OrdersPanel';
 import { ToastProvider, useToast } from './components/Toast';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import LoginPage from './components/auth/LoginPage';
+import SignupPage from './components/auth/SignupPage';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useStockData, useChartData } from './hooks/useStockData';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { useBreakpoint } from './hooks/useBreakpoint';
 import { useLiveMarketStore } from './hooks/useLiveMarketStore';
 import { useTrading } from './hooks/useTrading';
+import TopIndicesBar from './components/TopIndicesBar';
 import { POPULAR_STOCKS } from './constants/stockSymbols';
 
 // Build initial multi-watchlist data, migrating from old single-list format
@@ -49,6 +58,8 @@ const DEPTH_TRADES_TABS = [
 const INFO_TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'fundamentals', label: 'Fundamentals' },
+  { id: 'orders', label: 'Orders' },
+  { id: 'balance', label: 'Balance' },
 ];
 
 /**
@@ -60,6 +71,7 @@ const INFO_TABS = [
 function AppInner() {
   const { isMobile, isTablet, isDesktop } = useBreakpoint();
   const toast = useToast();
+  const { user, logout } = useAuth();
 
   const [selectedSymbol, setSelectedSymbol] = useState('RELIANCE.NS');
   const [watchlistData, setWatchlistData] = useLocalStorage('sp-watchlists', INITIAL_WATCHLISTS);
@@ -76,6 +88,7 @@ function AppInner() {
   const [mobileNavTab, setMobileNavTab] = useState('chart');
   const [mobileContentTab, setMobileContentTab] = useState('overview');
   const [searchDrawerOpen, setSearchDrawerOpen] = useState(false);
+  const [orderDrawerOpen, setOrderDrawerOpen] = useState(false);
 
   const ws = useWebSocket();
   const { data: restStockData, loading } = useStockData(selectedSymbol);
@@ -206,6 +219,11 @@ function AppInner() {
       close: d.close,
       volume: d.volume || 0,
     }));
+  }, [ws.chartData, restChartData]);
+
+  const chartDataSource = useMemo(() => {
+    const source = ws.chartData || restChartData;
+    return source?.source || 'simulator';
   }, [ws.chartData, restChartData]);
 
   // Accumulate live ticks into chart candles using state for proper reactivity
@@ -447,6 +465,7 @@ function AppInner() {
       isLive={isLive} onToggleLive={() => setIsLive(prev => !prev)}
       stockName={stockData?.shortName || selectedSymbol?.replace(/\.(NS|BO)$/, '')}
       exchange={stockData?.exchange || 'NSE'}
+      dataSource={chartDataSource}
     />
   ) : null;
 
@@ -467,11 +486,12 @@ function AppInner() {
         <div className="app app-mobile">
           <Header onSelectStock={handleSelectStock} darkMode={darkMode} onToggleDarkMode={handleToggleDarkMode}
             isMobile={true} onSearchOpen={() => setSearchDrawerOpen(true)}
-            livePrices={livePrices} />
+            livePrices={livePrices} user={user} onLogout={logout} />
           <TickerTape allTicks={ws.allTicks} connected={ws.connected} requestAllQuotes={ws.requestAllQuotes} onSelectStock={handleSelectStock} />
+          <TopIndicesBar onSelectIndex={handleSelectStock} />
 
           <main className="mobile-main">
-            {/* ── Chart — TradingView mobile style: ONLY stock header + chart ── */}
+            {/* ── Chart Tab ── */}
             {mobileNavTab === 'chart' && (
               <>
                 {selectedSymbol ? (
@@ -482,12 +502,21 @@ function AppInner() {
                     <div className="mobile-chart-container">
                       {ChartBlock}
                     </div>
+                    {/* Floating Buy/Sell buttons — full feature parity */}
+                    <div className="mobile-floating-trade">
+                      <button className="mobile-trade-btn buy" onClick={() => setOrderDrawerOpen(true)}>
+                        BUY
+                      </button>
+                      <button className="mobile-trade-btn sell" onClick={() => setOrderDrawerOpen(true)}>
+                        SELL
+                      </button>
+                    </div>
                   </>
                 ) : WelcomeBlock}
               </>
             )}
 
-            {/* ── Watchlist — FULL SCREEN SECTION, NOT popup/drawer ── */}
+            {/* ── Watchlist Tab ── */}
             {mobileNavTab === 'watchlist' && (
               <WatchlistSection
                 watchlistData={watchlistData}
@@ -503,14 +532,14 @@ function AppInner() {
               />
             )}
 
-            {/* ── Market Overview ── */}
+            {/* ── Market Overview Tab ── */}
             {mobileNavTab === 'market' && (
               <div className="mobile-section">
                 <MarketSummary onSelectIndex={handleSelectStock} compact={false} />
               </div>
             )}
 
-            {/* ── Depth / Trades — isolated section ── */}
+            {/* ── Depth / Trades Tab ── */}
             {mobileNavTab === 'orders' && selectedSymbol && (
               <div className="mobile-section">
                 <MobileStockCard stockData={stockData} symbol={selectedSymbol}
@@ -528,7 +557,7 @@ function AppInner() {
               </div>
             )}
 
-            {/* ── More — Overview + Fundamentals ── */}
+            {/* ── More — Overview + Fundamentals + Orders + Balance ── */}
             {mobileNavTab === 'more' && selectedSymbol && (
               <div className="mobile-section">
                 <MobileStockCard stockData={stockData} symbol={selectedSymbol}
@@ -548,11 +577,40 @@ function AppInner() {
                         onToggleWatchlist={() => handleToggleWatchlist(selectedSymbol)} showOnlyFundamentals={true} />
                     </div>
                   )}
+                  {mobileContentTab === 'orders' && (
+                    <div className="mobile-orders-section">
+                      <OrdersPanel
+                        openPositions={trading.openPositions || []}
+                        closedPositions={trading.closedPositions || []}
+                        openOrders={trading.openOrders || []}
+                        executedOrders={trading.executedOrders || []}
+                        livePrices={livePrices || {}}
+                        onClosePosition={trading.closePosition}
+                        onCancelOrder={trading.cancelOrder}
+                        balance={trading.balance || 0}
+                        realisedPnL={trading.realisedPnL || 0}
+                        unrealisedPnL={trading.unrealisedPnL || 0}
+                      />
+                    </div>
+                  )}
+                  {mobileContentTab === 'balance' && (
+                    <div className="mobile-balance-section">
+                      <BalancePanel
+                        balance={trading.balance || 0}
+                        usedMargin={trading.usedMargin || 0}
+                        realisedPnL={trading.realisedPnL || 0}
+                        unrealisedPnL={trading.unrealisedPnL || 0}
+                        onResetAccount={trading.resetAccount}
+                        onAddMoney={trading.addMoney}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             )}
           </main>
 
+          {/* Search Drawer */}
           <Drawer open={searchDrawerOpen} onClose={() => setSearchDrawerOpen(false)} position="bottom" title="Search Stocks">
             <div className="drawer-search-content">
               <SearchAutocomplete onSelect={(sym) => { handleSelectStock(sym); setSearchDrawerOpen(false); }} />
@@ -567,6 +625,25 @@ function AppInner() {
                   ))}
                 </div>
               </div>
+            </div>
+          </Drawer>
+
+          {/* Order Drawer — Buy/Sell panel on mobile */}
+          <Drawer open={orderDrawerOpen} onClose={() => setOrderDrawerOpen(false)} position="bottom"
+            title={`Trade ${stockData?.shortName || selectedSymbol?.replace(/\.(NS|BO)$/, '') || ''}`}>
+            <div className="mobile-order-drawer-content">
+              {selectedSymbol && stockData?.price > 0 && (
+                <OrderForm
+                  symbol={selectedSymbol}
+                  currentPrice={stockData.price}
+                  onPlaceOrder={trading.placeOrder}
+                  onOrderPlaced={(info) => {
+                    handleOrderPlaced(info);
+                    setOrderDrawerOpen(false);
+                  }}
+                  stockName={stockData?.shortName}
+                />
+              )}
             </div>
           </Drawer>
 
@@ -586,7 +663,7 @@ function AppInner() {
         <div className="app app-tablet terminal-layout">
           <TickerTape allTicks={ws.allTicks} connected={ws.connected} requestAllQuotes={ws.requestAllQuotes} onSelectStock={handleSelectStock} />
           <Header onSelectStock={handleSelectStock} darkMode={darkMode} onToggleDarkMode={handleToggleDarkMode}
-            livePrices={livePrices} />
+            livePrices={livePrices} user={user} onLogout={logout} />
 
           <div className="layout-wrapper">
             {/* Sidebar overlay on tablet */}
@@ -629,13 +706,15 @@ function AppInner() {
             </div>
           </div>
 
-          {/* Tablet bottom panel for stock info */}
+          {/* Tablet bottom panel with Trade tab added */}
           {selectedSymbol && (
             <div className="tablet-bottom-panel">
               <div className="tablet-bottom-tabs">
                 <button className={`panel-tab ${activeTab === 'price' ? 'active' : ''}`} onClick={() => setActiveTab('price')}>Price</button>
                 <button className={`panel-tab ${activeTab === 'depth' ? 'active' : ''}`} onClick={() => setActiveTab('depth')}>Depth</button>
                 <button className={`panel-tab ${activeTab === 'trades' ? 'active' : ''}`} onClick={() => setActiveTab('trades')}>Trades</button>
+                <button className={`panel-tab ${activeTab === 'order' ? 'active' : ''}`} onClick={() => setActiveTab('order')}>Trade</button>
+                <button className={`panel-tab ${activeTab === 'fundamentals' ? 'active' : ''}`} onClick={() => setActiveTab('fundamentals')}>Fundamentals</button>
               </div>
               <div className="tablet-bottom-content">
                 {activeTab === 'price' && (
@@ -645,6 +724,22 @@ function AppInner() {
                 )}
                 {activeTab === 'depth' && <OrderBook orderBook={displayOrderBook} currentPrice={stockData?.price} symbol={selectedSymbol} />}
                 {activeTab === 'trades' && <TradesTicker newTrades={displayNewTrades} currentPrice={stockData?.price} symbol={selectedSymbol} />}
+                {activeTab === 'order' && stockData?.price > 0 && (
+                  <div className="tablet-order-section">
+                    <OrderForm
+                      symbol={selectedSymbol}
+                      currentPrice={stockData.price}
+                      onPlaceOrder={trading.placeOrder}
+                      onOrderPlaced={handleOrderPlaced}
+                      stockName={stockData?.shortName}
+                    />
+                  </div>
+                )}
+                {activeTab === 'fundamentals' && stockData && (
+                  <LivePriceDisplay key={`${selectedSymbol}-fund`} stockData={stockData} symbol={selectedSymbol} liveTick={ws.liveTick}
+                    isInWatchlist={watchlist.includes(selectedSymbol)}
+                    onToggleWatchlist={() => handleToggleWatchlist(selectedSymbol)} showOnlyFundamentals={true} />
+                )}
               </div>
             </div>
           )}
@@ -663,7 +758,7 @@ function AppInner() {
       <div className="app app-desktop terminal-layout">
         <TickerTape allTicks={ws.allTicks} connected={ws.connected} requestAllQuotes={ws.requestAllQuotes} onSelectStock={handleSelectStock} />
         <Header onSelectStock={handleSelectStock} darkMode={darkMode} onToggleDarkMode={handleToggleDarkMode}
-          livePrices={livePrices} />
+          livePrices={livePrices} user={user} onLogout={logout} />
 
         <div className="layout-wrapper">
           {/* LEFT — Professional Sidebar */}
@@ -739,8 +834,20 @@ function AppInner() {
 
 export default function App() {
   return (
-    <ToastProvider>
-      <AppInner />
-    </ToastProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <ToastProvider>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignupPage />} />
+            <Route path="/*" element={
+              <ProtectedRoute>
+                <AppInner />
+              </ProtectedRoute>
+            } />
+          </Routes>
+        </ToastProvider>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
