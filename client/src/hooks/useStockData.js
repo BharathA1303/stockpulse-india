@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { API_BASE_URL } from '../constants/stockSymbols';
 
 /**
@@ -11,6 +11,7 @@ export function useStockData(symbol) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const retryRef = useRef(null);
 
   // Clear stale data immediately when symbol changes
   useEffect(() => {
@@ -31,8 +32,14 @@ export function useStockData(symbol) {
       }
       const json = await res.json();
       setData(json);
+      // Clear any pending retry on success
+      if (retryRef.current) { clearTimeout(retryRef.current); retryRef.current = null; }
     } catch (err) {
       setError(err.message || 'Failed to fetch stock data');
+      // Auto-retry after 3 seconds on failure
+      retryRef.current = setTimeout(() => {
+        fetchQuote();
+      }, 3000);
     } finally {
       setLoading(false);
     }
@@ -40,6 +47,7 @@ export function useStockData(symbol) {
 
   useEffect(() => {
     fetchQuote();
+    return () => { if (retryRef.current) clearTimeout(retryRef.current); };
   }, [fetchQuote]);
 
   return { data, loading, error, refetch: fetchQuote };
@@ -56,6 +64,7 @@ export function useChartData(symbol, range = '1mo') {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const retryRef = useRef(null);
 
   const fetchChart = useCallback(async () => {
     if (!symbol) return;
@@ -72,8 +81,14 @@ export function useChartData(symbol, range = '1mo') {
       }
       const json = await res.json();
       setData(json);
+      // Clear any pending retry on success
+      if (retryRef.current) { clearTimeout(retryRef.current); retryRef.current = null; }
     } catch (err) {
       setError(err.message || 'Failed to fetch chart data');
+      // Auto-retry after 3 seconds on failure
+      retryRef.current = setTimeout(() => {
+        fetchChart();
+      }, 3000);
     } finally {
       setLoading(false);
     }
@@ -81,6 +96,7 @@ export function useChartData(symbol, range = '1mo') {
 
   useEffect(() => {
     fetchChart();
+    return () => { if (retryRef.current) clearTimeout(retryRef.current); };
   }, [fetchChart]);
 
   return { data, loading, error, refetch: fetchChart };

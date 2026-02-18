@@ -9,8 +9,9 @@ import { POPULAR_STOCKS, API_BASE_URL } from '../constants/stockSymbols';
 export default function TickerTape({ allTicks = {}, connected, requestAllQuotes, onSelectStock }) {
   const [tickers, setTickers] = useState([]);
   const initialFetched = useRef(false);
+  const retryTimerRef = useRef(null);
 
-  // Fetch initial data via REST
+  // Fetch initial data via REST with auto-retry
   useEffect(() => {
     if (initialFetched.current) return;
 
@@ -27,9 +28,14 @@ export default function TickerTape({ allTicks = {}, connected, requestAllQuotes,
             changePercent: d.changePercent,
           })));
           initialFetched.current = true;
+          if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
+        } else {
+          // Server returned an error — retry
+          retryTimerRef.current = setTimeout(fetchInitial, 3000);
         }
       } catch {
-        setTickers(POPULAR_STOCKS.slice(0, 15).map(s => {
+        // Server not reachable — show placeholder and retry
+        setTickers(prev => prev.length > 0 ? prev : POPULAR_STOCKS.slice(0, 15).map(s => {
           const fakePrice = 500 + Math.random() * 3000;
           const fakeChange = (Math.random() - 0.45) * fakePrice * 0.02;
           return {
@@ -40,10 +46,12 @@ export default function TickerTape({ allTicks = {}, connected, requestAllQuotes,
             changePercent: Math.round((fakeChange / fakePrice) * 10000) / 100,
           };
         }));
+        retryTimerRef.current = setTimeout(fetchInitial, 3000);
       }
     };
 
     fetchInitial();
+    return () => { if (retryTimerRef.current) clearTimeout(retryTimerRef.current); };
   }, []);
 
   // Update from WebSocket ticks (allTicks is an object keyed by symbol)
