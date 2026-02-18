@@ -65,6 +65,9 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
+  // Skip X-Forwarded-For validation — trust proxy is already set above,
+  // but express-rate-limit v7 can still throw behind reverse proxies (Render, Railway, etc.)
+  validate: { xForwardedForHeader: false },
 });
 app.use('/api/', limiter);
 
