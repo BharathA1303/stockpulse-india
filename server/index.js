@@ -20,6 +20,8 @@ import quoteRouter from './routes/quote.js';
 import chartRouter from './routes/chart.js';
 import searchRouter from './routes/search.js';
 import tradingRouter from './routes/trading.js';
+import authRouter from './routes/auth.js';
+import { getAuthDB } from './services/authDB.js';
 
 // ─── Initialize ─────────────────────────────────────────────────────────────
 
@@ -32,6 +34,9 @@ const PORT = process.env.PORT || 5000;
 const simulator = new MarketSimulator();
 simulator.start(1000); // Tick every 1 second
 
+// Initialize auth database
+getAuthDB();
+
 // Attach simulator to app for routes to access
 app.set('simulator', simulator);
 
@@ -42,13 +47,14 @@ const socketManager = new SocketManager(httpServer, simulator);
 
 app.use(helmet());
 
+// Build allowed origins for CORS (supports comma-separated CLIENT_URL for multiple domains)
+const allowedOrigins = process.env.CLIENT_URL
+  ? process.env.CLIENT_URL.split(',').map(u => u.trim())
+  : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'];
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || [
-      'http://localhost:5173',
-      'http://localhost:5174',
-      'http://localhost:5175',
-    ],
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
   })
 );
@@ -66,6 +72,7 @@ app.use(express.json());
 
 // ─── Routes ─────────────────────────────────────────────────────────────────
 
+app.use('/api/auth', authRouter);
 app.use('/api/quote', quoteRouter);
 app.use('/api/chart', chartRouter);
 app.use('/api/search', searchRouter);
