@@ -4,6 +4,8 @@ const INDICES = [
   { symbol: '^NSEI', name: 'NIFTY 50', fallback: 25000 },
   { symbol: '^BSESN', name: 'SENSEX', fallback: 82000 },
   { symbol: '^NSEBANK', name: 'BANK NIFTY', fallback: 55000 },
+  { symbol: '^NSEI_MIDCAP', name: 'MIDCAP NIFTY', fallback: 13500 },
+  { symbol: '^NSEI_FIN', name: 'FIN NIFTY', fallback: 28000 },
 ];
 
 export default function MarketSummary({ onSelectIndex, compact = false }) {

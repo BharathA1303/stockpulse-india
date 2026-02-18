@@ -12,8 +12,8 @@ export const MARKET_INDICES = [
   { symbol: '^NSEI_IT', name: 'NIFTY IT', shortName: 'NIFTY IT', priority: 6, fallback: 42000 },
 ];
 
-/** Default top 3 */
-export const TOP_INDICES = MARKET_INDICES.filter(i => i.priority <= 3);
+/** Default top 5 — shown in the compact bar on all viewports */
+export const TOP_INDICES = MARKET_INDICES.filter(i => i.priority <= 5);
 
 /** All indices for the full panel */
 export const ALL_INDICES = [...MARKET_INDICES].sort((a, b) => a.priority - b.priority);

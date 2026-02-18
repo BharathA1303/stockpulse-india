@@ -24,8 +24,9 @@ function getStoredOrder() {
   return null;
 }
 
-function Header({ onSelectStock, darkMode, onToggleDarkMode, isMobile, onSearchOpen, livePrices }) {
+function Header({ onSelectStock, darkMode, onToggleDarkMode, isMobile, onSearchOpen, livePrices, user, onLogout }) {
   const marketOpen = isMarketOpen();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // Ordered list of indices (user can reorder via drag)
   const [orderedIndices, setOrderedIndices] = useState(() => {
@@ -234,8 +235,50 @@ function Header({ onSelectStock, darkMode, onToggleDarkMode, isMobile, onSearchO
             <span className="status-dot" />
             {isMobile ? (marketOpen ? 'Open' : 'Closed') : (marketOpen ? 'MARKET OPEN' : 'MARKET CLOSED')}
           </div>
+
+          {/* User Account */}
+          {user && (
+            <div className="header-user-menu">
+              <div className="header-user-avatar" title={user.username || user.email}>
+                {(user.fullName || user.username || 'U').charAt(0).toUpperCase()}
+              </div>
+              {!isMobile && (
+                <span className="header-user-name">{user.username || user.email}</span>
+              )}
+              {onLogout && (
+                <button className="header-logout-btn" onClick={() => setShowLogoutConfirm(true)} title="Logout" aria-label="Logout">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </header>
+      {/* Logout Confirmation Modal */}
+      {showLogoutConfirm && (
+        <>
+          <div className="logout-confirm-overlay" onClick={() => setShowLogoutConfirm(false)} />
+          <div className="logout-confirm-modal">
+            <div className="logout-confirm-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-down)" strokeWidth="1.5" strokeLinecap="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+            </div>
+            <h3 className="logout-confirm-title">Logout Confirmation</h3>
+            <p className="logout-confirm-text">Are you sure you want to logout? You will need to sign in again to access your trading terminal.</p>
+            <div className="logout-confirm-actions">
+              <button className="logout-confirm-btn logout-confirm-cancel" onClick={() => setShowLogoutConfirm(false)}>Cancel</button>
+              <button className="logout-confirm-btn logout-confirm-yes" onClick={() => { setShowLogoutConfirm(false); onLogout(); }}>Yes, Logout</button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* All Indices Slide Panel (from right) — drag to reorder */}
       {indicesPanelOpen && (

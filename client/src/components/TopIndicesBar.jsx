@@ -1,14 +1,17 @@
 import { useState, useEffect, memo } from 'react';
-import { TOP_INDICES } from '../constants/marketIndices';
+import { MARKET_INDICES } from '../constants/marketIndices';
+
+/** Show the first 5 indices on all viewports */
+const DISPLAY_INDICES = MARKET_INDICES.filter(i => i.priority <= 5);
 import { API_BASE_URL } from '../constants/stockSymbols';
 
 /**
- * TopIndicesBar — Compact horizontal bar showing the top 3 market indices
- * with live values and color-coded movement. Sits below the header.
+ * TopIndicesBar — Compact horizontal scrollable bar showing the top 5 market indices
+ * with live values and color-coded movement. Sits below the header on all viewports.
  */
 function TopIndicesBar({ onSelectIndex }) {
   const [data, setData] = useState(() =>
-    TOP_INDICES.map(idx => ({
+    DISPLAY_INDICES.map(idx => ({
       ...idx,
       price: idx.fallback,
       change: 0,
@@ -22,7 +25,7 @@ function TopIndicesBar({ onSelectIndex }) {
     const fetchIndices = async () => {
       try {
         const results = await Promise.all(
-          TOP_INDICES.map(async (idx) => {
+          DISPLAY_INDICES.map(async (idx) => {
             try {
               const res = await fetch(`${API_BASE_URL}/api/quote/${encodeURIComponent(idx.symbol)}`);
               if (!res.ok) throw new Error('API error');
