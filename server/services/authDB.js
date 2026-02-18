@@ -1,82 +1,97 @@
 /**
- * AuthDB — SQLite-backed authentication persistence layer.
+ * AuthDB — JSON-file-backed authentication persistence layer.
  *
- * Tables:
- *   - users: id, username, email, password_hash, role, created_at
- *
- * Uses better-sqlite3 for synchronous, fast, single-file DB.
+ * Stores users in a JSON file (data/users.json) for cross-platform compatibility.
+ * No native modules required — works on Render, Railway, Vercel, etc.
  */
 
-import Database from 'better-sqlite3';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.join(__dirname, '..', 'data', 'auth.db');
+const DB_PATH = path.join(__dirname, '..', 'data', 'users.json');
 
-let db;
+let users = [];
+let nextId = 1;
+let initialized = false;
 
-export function getAuthDB() {
-  if (!db) {
-    db = new Database(DB_PATH);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
-    initAuthTables();
+function loadDB() {
+  try {
+    if (fs.existsSync(DB_PATH)) {
+      const raw = fs.readFileSync(DB_PATH, 'utf-8');
+      const data = JSON.parse(raw);
+      users = data.users || [];
+      nextId = data.nextId || (users.length > 0 ? Math.max(...users.map(u => u.id)) + 1 : 1);
+    }
+  } catch {
+    users = [];
+    nextId = 1;
   }
-  return db;
 }
 
-function initAuthTables() {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT NOT NULL UNIQUE,
-      email TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      full_name TEXT DEFAULT '',
-      role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
-      created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-      last_login INTEGER
-    );
+function saveDB() {
+  try {
+    const dir = path.dirname(DB_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(DB_PATH, JSON.stringify({ users, nextId }, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('AuthDB: failed to save', err.message);
+  }
+}
 
-    CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-    CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
-  `);
+export function getAuthDB() {
+  if (!initialized) {
+    loadDB();
+    initialized = true;
+    console.log(`🔐 Auth DB loaded (${users.length} users)`);
+  }
+  return { ready: true };
 }
 
 // ── User CRUD ──
 
 export function findUserByEmail(email) {
-  const db = getAuthDB();
-  return db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+  return users.find(u => u.email === email) || null;
 }
 
 export function findUserByUsername(username) {
-  const db = getAuthDB();
-  return db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+  return users.find(u => u.username === username) || null;
 }
 
 export function findUserById(id) {
-  const db = getAuthDB();
-  return db.prepare('SELECT id, username, email, full_name, role, created_at, last_login FROM users WHERE id = ?').get(id);
+  const u = users.find(u => u.id === id);
+  if (!u) return null;
+  // Return without password_hash
+  const { password_hash, ...safe } = u;
+  return safe;
 }
 
 export function createUser({ username, email, passwordHash, fullName = '', role = 'user' }) {
-  const db = getAuthDB();
-  const stmt = db.prepare(
-    'INSERT INTO users (username, email, password_hash, full_name, role) VALUES (?, ?, ?, ?, ?)'
-  );
-  const result = stmt.run(username, email, passwordHash, fullName, role);
-  return { id: result.lastInsertRowid, username, email, fullName, role };
+  const now = Math.floor(Date.now() / 1000);
+  const user = {
+    id: nextId++,
+    username,
+    email,
+    password_hash: passwordHash,
+    full_name: fullName,
+    role,
+    created_at: now,
+    last_login: null,
+  };
+  users.push(user);
+  saveDB();
+  return { id: user.id, username, email, fullName, role };
 }
 
 export function updateLastLogin(userId) {
-  const db = getAuthDB();
-  db.prepare('UPDATE users SET last_login = ? WHERE id = ?').run(Math.floor(Date.now() / 1000), userId);
+  const user = users.find(u => u.id === userId);
+  if (user) {
+    user.last_login = Math.floor(Date.now() / 1000);
+    saveDB();
+  }
 }
 
 export function userExists(email, username) {
-  const db = getAuthDB();
-  const row = db.prepare('SELECT id FROM users WHERE email = ? OR username = ?').get(email, username);
-  return !!row;
+  return users.some(u => u.email === email || u.username === username);
 }
