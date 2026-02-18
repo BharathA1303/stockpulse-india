@@ -129,6 +129,19 @@ function AppInner() {
     }
   }, [selectedSymbol, ws.connected, chartRange]);
 
+  // ── Refetch REST data when WebSocket reconnects (server may have restarted) ──
+  const prevConnectedRef = useRef(false);
+  useEffect(() => {
+    if (ws.connected && !prevConnectedRef.current) {
+      // WebSocket just connected/reconnected — refresh REST data too
+      if (restStockData === null || restChartData === null) {
+        // Data hooks will auto-retry, but request via WS as well
+        ws.requestAllQuotes();
+      }
+    }
+    prevConnectedRef.current = ws.connected;
+  }, [ws.connected]);
+
   // ── Freeze Depth/Trades when Live is OFF ──
   const frozenOrderBookRef = useRef(null);
   useEffect(() => {
