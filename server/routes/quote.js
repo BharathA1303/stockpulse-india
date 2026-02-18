@@ -1,21 +1,14 @@
 /**
  * GET /api/quote/:symbol
  *
- * Returns stock quote data. Uses the MarketSimulator as the primary source
- * and falls back to Yahoo Finance for stocks not in the simulator.
+ * Returns stock quote data.
+ * Priority: Yahoo Finance (free) → Simulator fallback
  */
 
 import { Router } from 'express';
-import YahooFinance from 'yahoo-finance2';
+import { getYahooFinanceService } from '../services/yahooFinanceService.js';
 import Cache from '../utils/cache.js';
 import { sanitizeSymbol, ensureExchangeSuffix } from '../utils/sanitize.js';
-
-let yf;
-try {
-  yf = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
-} catch {
-  yf = null;
-}
 
 const router = Router();
 const cache = new Cache(10_000); // 10-second TTL for fresh sim data
@@ -33,59 +26,31 @@ router.get('/:symbol', async (req, res) => {
     const cached = cache.get(cacheKey);
     if (cached) return res.json(cached);
 
-    // Try simulator first (always has live data)
+    // 1. Try Yahoo Finance first (free, no API key needed)
+    const yf = getYahooFinanceService();
+    try {
+      const quote = await yf.getQuote(fullSymbol);
+      if (quote && quote.price > 0) {
+        quote.source = 'yahoo';
+        cache.set(cacheKey, quote);
+        return res.json(quote);
+      }
+    } catch (err) {
+      console.warn(`Yahoo Finance quote failed [${fullSymbol}]:`, err.message);
+    }
+
+    // 2. Fallback to simulator
     const simulator = req.app.get('simulator');
     if (simulator) {
       const simQuote = simulator.getQuote(fullSymbol);
       if (simQuote) {
+        simQuote.source = 'simulator';
         cache.set(cacheKey, simQuote);
         return res.json(simQuote);
       }
     }
 
-    // Fallback to Yahoo Finance for unknown symbols
-    if (!yf) {
-      return res.status(404).json({ error: 'Symbol not found in simulator' });
-    }
-
-    let quote;
-    try {
-      quote = await yf.quote(fullSymbol);
-    } catch {
-      return res.status(404).json({ error: 'Symbol not found' });
-    }
-
-    if (!quote) {
-      return res.status(404).json({ error: 'Symbol not found' });
-    }
-
-    const payload = {
-      symbol: quote.symbol,
-      shortName: quote.shortName || quote.longName || symbol,
-      longName: quote.longName || quote.shortName || symbol,
-      price: quote.regularMarketPrice ?? 0,
-      change: quote.regularMarketChange ?? 0,
-      changePercent: quote.regularMarketChangePercent ?? 0,
-      previousClose: quote.regularMarketPreviousClose ?? 0,
-      open: quote.regularMarketOpen ?? 0,
-      dayHigh: quote.regularMarketDayHigh ?? 0,
-      dayLow: quote.regularMarketDayLow ?? 0,
-      volume: quote.regularMarketVolume ?? 0,
-      marketCap: quote.marketCap ?? 0,
-      fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh ?? 0,
-      fiftyTwoWeekLow: quote.fiftyTwoWeekLow ?? 0,
-      exchange: quote.exchange || '',
-      marketState: quote.marketState || 'CLOSED',
-      currency: quote.currency || 'INR',
-      peRatio: quote.trailingPE ?? null,
-      pbRatio: quote.priceToBook ?? null,
-      eps: quote.epsTrailingTwelveMonths ?? null,
-      dividendYield: quote.dividendYield ?? null,
-      bookValue: quote.bookValue ?? null,
-    };
-
-    cache.set(cacheKey, payload);
-    return res.json(payload);
+    return res.status(404).json({ error: 'Symbol not found' });
   } catch (err) {
     console.error(`Quote error [${req.params.symbol}]:`, err.message);
     return res.status(500).json({ error: 'Failed to fetch quote data' });

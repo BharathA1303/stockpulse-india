@@ -1,65 +1,17 @@
 /**
  * GET /api/chart/:symbol?range=1d|1w|1mo|3mo|1y
  *
- * Returns historical OHLCV chart data. Uses the MarketSimulator for
- * simulated data, with Yahoo Finance as fallback.
+ * Returns historical OHLCV chart data.
+ * Priority: Yahoo Finance (free) → Simulator fallback
  */
 
 import { Router } from 'express';
-import YahooFinance from 'yahoo-finance2';
+import { getYahooFinanceService } from '../services/yahooFinanceService.js';
 import Cache from '../utils/cache.js';
 import { sanitizeSymbol, ensureExchangeSuffix } from '../utils/sanitize.js';
 
-let yf;
-try {
-  yf = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
-} catch {
-  yf = null;
-}
-
 const router = Router();
 const cache = new Cache(30_000);
-
-function getRangeOptions(range) {
-  const now = new Date();
-  let period1, interval;
-
-  switch (range) {
-    case '1m':
-    case '2m':
-    case '3m':
-    case '5m':
-    case '10m':
-    case '15m':
-    case '30m':
-      period1 = new Date(now); period1.setDate(period1.getDate() - 1);
-      interval = '1m'; break;
-    case '1h':
-    case '4h':
-      period1 = new Date(now); period1.setDate(period1.getDate() - 5);
-      interval = '5m'; break;
-    case '1d':
-      period1 = new Date(now); period1.setDate(period1.getDate() - 1);
-      interval = '5m'; break;
-    case '1w':
-      period1 = new Date(now); period1.setDate(period1.getDate() - 7);
-      interval = '15m'; break;
-    case '1mo':
-      period1 = new Date(now); period1.setMonth(period1.getMonth() - 1);
-      interval = '1d'; break;
-    case '3mo':
-      period1 = new Date(now); period1.setMonth(period1.getMonth() - 3);
-      interval = '1d'; break;
-    case '1y':
-      period1 = new Date(now); period1.setFullYear(period1.getFullYear() - 1);
-      interval = '1wk'; break;
-    default:
-      period1 = new Date(now); period1.setMonth(period1.getMonth() - 1);
-      interval = '1d';
-  }
-
-  return { period1, period2: now, interval };
-}
 
 router.get('/:symbol', async (req, res) => {
   try {
@@ -69,7 +21,7 @@ router.get('/:symbol', async (req, res) => {
     }
 
     const range = (req.query.range || '1mo').toLowerCase();
-    const validRanges = ['1m','2m','3m','5m','10m','15m','30m','1h','4h','1d','1w','1mo','3mo','1y'];
+    const validRanges = ['1m', '2m', '3m', '5m', '10m', '15m', '30m', '1h', '4h', '1d', '1w', '1mo', '3mo', '1y'];
     const normalizedRange = validRanges.includes(range) ? range : '1mo';
     const fullSymbol = ensureExchangeSuffix(symbol);
     const cacheKey = `chart:${fullSymbol}:${normalizedRange}`;
@@ -77,51 +29,31 @@ router.get('/:symbol', async (req, res) => {
     const cached = cache.get(cacheKey);
     if (cached) return res.json(cached);
 
-    // Try simulator first
+    // 1. Try Yahoo Finance first (free, no API key needed)
+    const yf = getYahooFinanceService();
+    try {
+      const chartData = await yf.getTimeSeries(fullSymbol, normalizedRange);
+      if (chartData && chartData.data && chartData.data.length > 0) {
+        chartData.source = 'yahoo';
+        cache.set(cacheKey, chartData);
+        return res.json(chartData);
+      }
+    } catch (err) {
+      console.warn(`Yahoo Finance chart failed [${fullSymbol}]:`, err.message);
+    }
+
+    // 2. Fallback to simulator
     const simulator = req.app.get('simulator');
     if (simulator) {
       const simData = simulator.getChartData(fullSymbol, normalizedRange);
       if (simData && simData.data && simData.data.length > 0) {
+        simData.source = 'simulator';
         cache.set(cacheKey, simData);
         return res.json(simData);
       }
     }
 
-    // Fallback to Yahoo Finance
-    if (!yf) {
-      return res.status(404).json({ error: 'No chart data available' });
-    }
-
-    const { period1, period2, interval } = getRangeOptions(normalizedRange);
-
-    let result;
-    try {
-      result = await yf.chart(fullSymbol, { period1, period2, interval });
-    } catch {
-      return res.status(404).json({ error: 'No chart data available' });
-    }
-
-    if (!result || !result.quotes || result.quotes.length === 0) {
-      return res.status(404).json({ error: 'No chart data available' });
-    }
-
-    const payload = {
-      symbol: fullSymbol,
-      range: normalizedRange,
-      data: result.quotes
-        .filter(q => q.close != null)
-        .map(q => ({
-          date: q.date?.toISOString?.() || new Date(q.date).toISOString(),
-          open: q.open ?? q.close,
-          high: q.high ?? q.close,
-          low: q.low ?? q.close,
-          close: q.close,
-          volume: q.volume ?? 0,
-        })),
-    };
-
-    cache.set(cacheKey, payload);
-    return res.json(payload);
+    return res.status(404).json({ error: 'No chart data available' });
   } catch (err) {
     console.error(`Chart error [${req.params.symbol}]:`, err.message);
     return res.status(500).json({ error: 'Failed to fetch chart data' });
