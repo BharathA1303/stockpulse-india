@@ -5,7 +5,7 @@
  * The client fetches state and sends actions to the server.
  */
 
-const API = `${import.meta.env.VITE_API_URL}/api/trading`;
+const API = `${import.meta.env.VITE_API_URL || ''}/api/trading`;
 
 /**
  * Create a new TradingEngine that talks to the server API.
