@@ -83,7 +83,11 @@ export default function LoginPage() {
       if (res.ok && data.success) {
         setOtpStage(true);
         setMaskedEmail(data.maskedEmail || '');
-        setOtpSuccess(data.message || 'Verification code sent!');
+        if (data.fallbackCode) {
+          setOtpSuccess(`Email delivery failed. Your login code is: ${data.fallbackCode}`);
+        } else {
+          setOtpSuccess(data.message || 'Verification code sent!');
+        }
         setTimeRemaining(data.timeRemaining || 120);
         setOtpCode('');
         setOtpError('');
@@ -168,7 +172,11 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (res.ok && data.success) {
-        setOtpSuccess('New verification code sent!');
+        if (data.fallbackCode) {
+          setOtpSuccess(`Email delivery failed. Your login code is: ${data.fallbackCode}`);
+        } else {
+          setOtpSuccess('New verification code sent!');
+        }
         setTimeRemaining(data.timeRemaining || 120);
         setOtpCode('');
       } else {

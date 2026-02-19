@@ -95,7 +95,11 @@ export default function SignupPage() {
 
       if (res.ok && data.success) {
         setOtpSent(true);
-        setOtpSuccess(data.message || 'Verification code sent!');
+        if (data.fallbackCode) {
+          setOtpSuccess(`Email delivery failed. Your verification code is: ${data.fallbackCode}`);
+        } else {
+          setOtpSuccess(data.message || 'Verification code sent!');
+        }
         setTimeRemaining(data.timeRemaining || 120);
         setOtpCode('');
       } else {

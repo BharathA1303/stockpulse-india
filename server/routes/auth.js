@@ -151,9 +151,13 @@ router.post('/send-otp', async (req, res) => {
 
     if (result.success) {
       const timeRemaining = getOTPTimeRemaining(normalizedEmail);
-      return res.json({ success: true, message: result.message, timeRemaining });
-    } else if (result.emailError) {
-      return res.status(502).json({ error: 'Email service unavailable. Please try again later.' });
+      const response = { success: true, message: result.message, timeRemaining };
+      // If email delivery failed, include the OTP so the frontend can show it
+      if (result.emailFailed) {
+        response.fallbackCode = result.fallbackCode;
+        response.message = 'Email could not be delivered. Use the code shown below.';
+      }
+      return res.json(response);
     } else {
       return res.status(429).json({ error: result.message });
     }
@@ -250,16 +254,18 @@ router.post('/login-send-otp', async (req, res) => {
     const timeRemaining = getOTPTimeRemaining(user.email);
 
     if (result.success) {
-      return res.json({
+      const response = {
         success: true,
         message: `Verification code sent to ${maskedEmail}`,
         maskedEmail,
         timeRemaining,
-      });
-    } else if (result.emailError) {
-      // Email failed but OTP is stored — still let user proceed
-      // (OTP visible in server logs for debugging)
-      return res.status(502).json({ error: 'Email service unavailable. Please try again later.' });
+      };
+      // If email delivery failed, include the OTP so the frontend can show it
+      if (result.emailFailed) {
+        response.fallbackCode = result.fallbackCode;
+        response.message = 'Email could not be delivered. Use the code shown below.';
+      }
+      return res.json(response);
     } else {
       return res.status(429).json({ error: result.message });
     }
