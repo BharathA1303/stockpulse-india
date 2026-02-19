@@ -35,6 +35,11 @@ function createTransporter() {
     port,
     secure: port === 465,
     auth: { user, pass },
+    // Force IPv4 — Render/Railway can't route IPv6 to Gmail SMTP
+    family: 4,
+    // Connection timeout (10s) to fail fast if unreachable
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
   });
 }
 

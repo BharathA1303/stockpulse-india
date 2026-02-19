@@ -243,19 +243,23 @@ router.post('/login-send-otp', async (req, res) => {
     // Password correct — send OTP to user's registered email
     const result = await sendOTP(user.email, 'login');
 
-    if (result.success) {
-      // Mask email for display
-      const emailParts = user.email.split('@');
-      const maskedLocal = emailParts[0].slice(0, 2) + '***';
-      const maskedEmail = maskedLocal + '@' + emailParts[1];
+    // Mask email for display
+    const emailParts = user.email.split('@');
+    const maskedLocal = emailParts[0].slice(0, 2) + '***';
+    const maskedEmail = maskedLocal + '@' + emailParts[1];
+    const timeRemaining = getOTPTimeRemaining(user.email);
 
-      const timeRemaining = getOTPTimeRemaining(user.email);
+    if (result.success) {
       return res.json({
         success: true,
         message: `Verification code sent to ${maskedEmail}`,
         maskedEmail,
         timeRemaining,
       });
+    } else if (result.emailError) {
+      // Email failed but OTP is stored — still let user proceed
+      // (OTP visible in server logs for debugging)
+      return res.status(502).json({ error: 'Email service unavailable. Please try again later.' });
     } else {
       return res.status(429).json({ error: result.message });
     }
