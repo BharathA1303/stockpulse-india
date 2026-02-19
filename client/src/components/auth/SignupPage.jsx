@@ -1,9 +1,11 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 /**
- * SignupPage — Professional dark-themed registration form.
+ * SignupPage — Professional dark-themed registration form with email OTP verification.
  */
 export default function SignupPage() {
   const { signup, isAuthenticated } = useAuth();
@@ -20,15 +22,132 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Email verification state
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState('');
+  const [otpSuccess, setOtpSuccess] = useState('');
+  const [timeRemaining, setTimeRemaining] = useState(0);
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const timerRef = useRef(null);
+
   if (isAuthenticated) {
     navigate('/', { replace: true });
     return null;
   }
 
+  // Countdown timer
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    if (timeRemaining > 0) {
+      timerRef.current = setInterval(() => {
+        setTimeRemaining(prev => {
+          if (prev <= 1) {
+            clearInterval(timerRef.current);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [timeRemaining]);
+
   const handleChange = (field) => (e) => {
     setForm(prev => ({ ...prev, [field]: e.target.value }));
     setError('');
+
+    // If email changed and was verified, reset verification
+    if (field === 'email' && emailVerified && e.target.value.trim().toLowerCase() !== verifiedEmail) {
+      setEmailVerified(false);
+      setOtpSent(false);
+      setOtpCode('');
+      setOtpError('');
+      setOtpSuccess('');
+      setTimeRemaining(0);
+    }
   };
+
+  const handleSendOTP = useCallback(async () => {
+    const email = form.email.trim();
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setOtpError('Please enter a valid email address.');
+      return;
+    }
+
+    setOtpLoading(true);
+    setOtpError('');
+    setOtpSuccess('');
+
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.toLowerCase() }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setOtpSent(true);
+        setOtpSuccess(data.message || 'Verification code sent!');
+        setTimeRemaining(data.timeRemaining || 120);
+        setOtpCode('');
+      } else {
+        setOtpError(data.error || 'Failed to send code.');
+      }
+    } catch {
+      setOtpError('Network error. Please try again.');
+    } finally {
+      setOtpLoading(false);
+    }
+  }, [form.email]);
+
+  const handleVerifyOTP = useCallback(async () => {
+    const email = form.email.trim().toLowerCase();
+    const code = otpCode.trim();
+
+    if (!code) {
+      setOtpError('Please enter the verification code.');
+      return;
+    }
+
+    setOtpLoading(true);
+    setOtpError('');
+
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setEmailVerified(true);
+        setVerifiedEmail(email);
+        setOtpSuccess('Email verified successfully!');
+        setOtpError('');
+        setTimeRemaining(0);
+        if (timerRef.current) clearInterval(timerRef.current);
+      } else {
+        setOtpError(data.error || 'Invalid code.');
+        if (data.expired) {
+          setTimeRemaining(0);
+        }
+      }
+    } catch {
+      setOtpError('Network error. Please try again.');
+    } finally {
+      setOtpLoading(false);
+    }
+  }, [form.email, otpCode]);
 
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
@@ -49,6 +168,11 @@ export default function SignupPage() {
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       setError('Please enter a valid email address.');
+      return;
+    }
+
+    if (!emailVerified) {
+      setError('Please verify your email address before creating an account.');
       return;
     }
 
@@ -76,7 +200,13 @@ export default function SignupPage() {
     } finally {
       setLoading(false);
     }
-  }, [form, signup, navigate]);
+  }, [form, emailVerified, signup, navigate]);
+
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
 
   return (
     <div className="auth-page">
@@ -94,8 +224,8 @@ export default function SignupPage() {
           </div>
           <h2 className="auth-hero-title">Start Your<br />Trading Journey</h2>
           <p className="auth-hero-subtitle">
-            Join thousands of traders using StockPulse to track, analyze,
-            and trade Indian stocks in real time.
+            Join traders using StockPulse to track, analyze,
+            and practice trading Indian stocks with simulated data.
           </p>
           <div className="auth-hero-chart">
             <svg viewBox="0 0 400 180" fill="none" className="auth-chart-svg">
@@ -131,6 +261,24 @@ export default function SignupPage() {
 
       {/* Right Form Panel */}
       <div className="auth-form-panel">
+        {/* Transparent chart background for mobile */}
+        <div className="auth-mobile-chart-bg" aria-hidden="true">
+          <svg viewBox="0 0 400 180" fill="none">
+            <defs>
+              <linearGradient id="smChGF" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#6366f1" stopOpacity="0.25" />
+                <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <line x1="0" y1="45" x2="400" y2="45" stroke="rgba(99,102,241,0.08)" />
+            <line x1="0" y1="90" x2="400" y2="90" stroke="rgba(99,102,241,0.08)" />
+            <line x1="0" y1="135" x2="400" y2="135" stroke="rgba(99,102,241,0.08)" />
+            <path d="M0 150 L50 130 L100 140 L150 100 L200 110 L250 70 L300 85 L350 45 L400 30"
+              stroke="#6366f1" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+            <path d="M0 150 L50 130 L100 140 L150 100 L200 110 L250 70 L300 85 L350 45 L400 30 L400 180 L0 180Z"
+              fill="url(#smChGF)" />
+          </svg>
+        </div>
         <div className="auth-form-container auth-form-container-signup">
           <div className="auth-mobile-logo">
             <svg viewBox="0 0 64 64" width="40" height="40" fill="none">
@@ -177,16 +325,94 @@ export default function SignupPage() {
               </div>
             </div>
 
+            {/* Email with verify button */}
             <div className="auth-field">
-              <label className="auth-label" htmlFor="signup-email">Email *</label>
-              <div className="auth-input-wrapper">
-                <svg className="auth-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" />
-                </svg>
-                <input id="signup-email" type="email" className="auth-input" value={form.email}
-                  onChange={handleChange('email')} placeholder="you@example.com" autoComplete="email" disabled={loading} />
+              <label className="auth-label" htmlFor="signup-email">Email * {emailVerified && <span className="auth-verified-badge">&#10003; Verified</span>}</label>
+              <div className="auth-input-with-btn">
+                <div className="auth-input-wrapper auth-input-wrapper-flex">
+                  <svg className="auth-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" />
+                  </svg>
+                  <input id="signup-email" type="email" className="auth-input auth-input-shortened"
+                    value={form.email} onChange={handleChange('email')}
+                    placeholder="you@example.com" autoComplete="email"
+                    disabled={loading || emailVerified} />
+                </div>
+                {!emailVerified && (
+                  <button
+                    type="button"
+                    className="auth-otp-btn"
+                    onClick={handleSendOTP}
+                    disabled={otpLoading || !form.email.trim()}
+                  >
+                    {otpLoading ? (
+                      <span className="auth-spinner" />
+                    ) : otpSent ? 'Resend' : 'Verify Email'}
+                  </button>
+                )}
               </div>
             </div>
+
+            {/* OTP input field — shown after code is sent */}
+            {otpSent && !emailVerified && (
+              <div className="auth-field auth-otp-field">
+                <label className="auth-label" htmlFor="signup-otp">
+                  Verification Code
+                  {timeRemaining > 0 && (
+                    <span className="auth-otp-timer"> ({formatTime(timeRemaining)})</span>
+                  )}
+                </label>
+                <div className="auth-input-with-btn">
+                  <div className="auth-input-wrapper auth-input-wrapper-flex">
+                    <svg className="auth-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                    <input
+                      id="signup-otp"
+                      type="text"
+                      className="auth-input auth-input-shortened"
+                      value={otpCode}
+                      onChange={(e) => { setOtpCode(e.target.value); setOtpError(''); }}
+                      placeholder="Enter 6-digit code"
+                      maxLength={6}
+                      autoComplete="one-time-code"
+                      disabled={otpLoading}
+                    />
+                  </div>
+                  {timeRemaining > 0 ? (
+                    <button
+                      type="button"
+                      className="auth-otp-btn auth-otp-verify-btn"
+                      onClick={handleVerifyOTP}
+                      disabled={otpLoading || !otpCode.trim()}
+                    >
+                      {otpLoading ? <span className="auth-spinner" /> : 'Get Verified'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="auth-otp-btn auth-otp-resend-btn"
+                      onClick={handleSendOTP}
+                      disabled={otpLoading}
+                    >
+                      {otpLoading ? <span className="auth-spinner" /> : 'Resend Code'}
+                    </button>
+                  )}
+                </div>
+                {otpError && <p className="auth-otp-error">{otpError}</p>}
+                {otpSuccess && !otpError && <p className="auth-otp-success">{otpSuccess}</p>}
+              </div>
+            )}
+
+            {/* Show verified success */}
+            {emailVerified && (
+              <div className="auth-otp-verified-msg">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00d09c" strokeWidth="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
+                </svg>
+                <span>Email verified successfully!</span>
+              </div>
+            )}
 
             <div className="auth-field">
               <label className="auth-label" htmlFor="signup-password">Password *</label>
@@ -223,7 +449,7 @@ export default function SignupPage() {
               </div>
             </div>
 
-            <button type="submit" className="auth-submit" disabled={loading}>
+            <button type="submit" className="auth-submit" disabled={loading || !emailVerified}>
               {loading ? (
                 <><span className="auth-spinner" /> Creating account...</>
               ) : (
