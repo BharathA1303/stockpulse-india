@@ -1,0 +1,16 @@
+# render.yaml — Render Blueprint for StockPulse India backend
+services:
+  - type: web
+    name: stockpulse-server
+    runtime: node
+    region: oregon
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CLIENT_URL
+        sync: false   # set manually in Render dashboard
+      - key: PORT
+        value: 10000

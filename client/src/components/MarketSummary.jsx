@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../constants/stockSymbols';
 
 const INDICES = [
   { symbol: '^NSEI', name: 'NIFTY 50', fallback: 25000 },
@@ -17,7 +18,7 @@ export default function MarketSummary({ onSelectIndex, compact = false }) {
         const results = await Promise.all(
           INDICES.map(async (idx) => {
             try {
-              const res = await fetch(`/api/quote/${encodeURIComponent(idx.symbol)}`);
+              const res = await fetch(`${API_BASE_URL}/api/quote/${encodeURIComponent(idx.symbol)}`);
               if (!res.ok) throw new Error('API error');
               const json = await res.json();
               return {
