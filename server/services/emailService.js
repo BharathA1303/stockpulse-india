@@ -21,7 +21,6 @@ const OTP_COOLDOWN_MS = 30 * 1000; // 30 seconds between resends
  */
 function createTransporter() {
   const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const port = parseInt(process.env.SMTP_PORT || '587', 10);
   const user = process.env.SMTP_USER || '';
   const pass = process.env.SMTP_PASS || '';
 
@@ -30,17 +29,23 @@ function createTransporter() {
     return null;
   }
 
-  return nodemailer.createTransport({
+  // Use port 465 (direct SSL) — port 587 (STARTTLS) is blocked on many cloud platforms
+  // including Render free tier. Port 465 is more reliable.
+  const port = parseInt(process.env.SMTP_PORT || '465', 10);
+
+  const transport = nodemailer.createTransport({
     host,
     port,
-    secure: port === 465,
+    secure: true,           // Always use SSL for reliability on cloud hosts
     auth: { user, pass },
-    // Force IPv4 — Render/Railway can't route IPv6 to Gmail SMTP
-    family: 4,
-    // Connection timeout (10s) to fail fast if unreachable
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
+    family: 4,              // Force IPv4 — Render can't route IPv6
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000,
   });
+
+  console.log(`📧 SMTP configured: ${host}:${port} (SSL, IPv4) as ${user}`);
+  return transport;
 }
 
 let transporter = null;
@@ -144,10 +149,9 @@ export async function sendOTP(email, purpose = 'verification') {
     return { success: true, message: 'Verification code sent to your email.' };
   } catch (err) {
     console.error('Email send error:', err.message);
+    // Still store the OTP so dev can see in logs
     console.log(`📧 [FALLBACK] OTP for ${normalizedEmail}: ${code}`);
-    // Email failed (e.g. SMTP blocked on hosting) — return success with fallback code
-    // so the frontend can display it. Fine for a simulated trading platform.
-    return { success: true, message: 'Email delivery failed.', fallbackCode: code, emailFailed: true };
+    return { success: false, message: 'Failed to send email. Please try again.', emailError: true };
   }
 }
 
