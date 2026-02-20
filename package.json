@@ -12,9 +12,21 @@
     "test": "cd client && npm test",
     "install:all": "npm install && cd server && npm install && cd ../client && npm install"
   },
-  "keywords": ["stocks", "india", "nse", "bse", "nifty", "sensex", "finance", "dashboard"],
+  "keywords": [
+    "stocks",
+    "india",
+    "nse",
+    "bse",
+    "nifty",
+    "sensex",
+    "finance",
+    "dashboard"
+  ],
   "license": "MIT",
   "devDependencies": {
     "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "cors": "^2.8.6"
   }
 }
