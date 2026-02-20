@@ -2,7 +2,7 @@ name: Deploy StockPulse
 
 on:
   push:
-    branches: [master]
+    branches: [master, main]
 
 jobs:
   deploy:
