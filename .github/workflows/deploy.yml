@@ -1,0 +1,32 @@
+name: Deploy StockPulse
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/stockpulse-india
+            git pull origin main
+
+            # Rebuild backend
+            cd server
+            npm install
+            pm2 restart stockpulse --update-env
+
+            # Rebuild frontend
+            cd ../client
+            echo "VITE_API_URL=http://3.110.148.69:5000" > .env.production
+            npm install
+            npm run build
+
+            pm2 save
