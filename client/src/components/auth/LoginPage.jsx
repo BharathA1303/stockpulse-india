@@ -205,7 +205,7 @@ export default function LoginPage() {
           <h2 className="auth-hero-title">Your Gateway to<br />Indian Markets</h2>
           <p className="auth-hero-subtitle">
             Track stock prices, analyze market trends, and practice
-            trading with our simulated trading terminal.
+            trading with our simulated trading Platform.
           </p>
 
           {/* Animated chart illustration */}
