@@ -16,7 +16,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd ~/stockpulse-india
-            git pull origin main
+            git pull origin master
 
             # Rebuild backend
             cd server
@@ -25,7 +25,8 @@ jobs:
 
             # Rebuild frontend
             cd ../client
-            echo "VITE_API_URL=http://3.110.148.69:5000" > .env.production
+            echo "VITE_API_URL=http://${{ secrets.EC2_HOST }}:5000" > .env.production
+            echo "VITE_SOCKET_URL=http://${{ secrets.EC2_HOST }}:5000" >> .env.production
             npm install
             npm run build
 
