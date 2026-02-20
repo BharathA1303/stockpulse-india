@@ -144,7 +144,7 @@ router.post('/send-otp', async (req, res) => {
     // Check if email is already registered (for signup flow)
     const existingUser = findUserByEmail(normalizedEmail);
     if (existingUser) {
-      return res.status(409).json({ error: 'This email is already registered. Please sign in instead.' });
+      return res.status(409).json({ error: 'This email is already registered. Please sign in instead.', alreadyRegistered: true });
     }
 
     const result = await sendOTP(normalizedEmail, 'verification');
@@ -153,7 +153,9 @@ router.post('/send-otp', async (req, res) => {
       const timeRemaining = getOTPTimeRemaining(normalizedEmail);
       return res.json({ success: true, message: result.message, timeRemaining });
     } else if (result.emailError) {
-      return res.status(502).json({ error: 'Email service unavailable. Please try again later.' });
+      // Email failed but OTP is stored in memory (logged to console for dev use)
+      const timeRemaining = getOTPTimeRemaining(normalizedEmail);
+      return res.json({ success: true, message: 'Verification code sent (check server console if email not received).', timeRemaining });
     } else {
       return res.status(429).json({ error: result.message });
     }
@@ -259,7 +261,12 @@ router.post('/login-send-otp', async (req, res) => {
     } else if (result.emailError) {
       // Email failed but OTP is stored — still let user proceed
       // (OTP visible in server logs for debugging)
-      return res.status(502).json({ error: 'Email service unavailable. Please try again later.' });
+      return res.json({
+        success: true,
+        message: `Verification code sent (check server console if email not received).`,
+        maskedEmail,
+        timeRemaining,
+      });
     } else {
       return res.status(429).json({ error: result.message });
     }

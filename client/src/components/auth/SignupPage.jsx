@@ -31,6 +31,7 @@ export default function SignupPage() {
   const [otpSuccess, setOtpSuccess] = useState('');
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [emailAlreadyRegistered, setEmailAlreadyRegistered] = useState(false);
   const timerRef = useRef(null);
 
   if (isAuthenticated) {
@@ -61,14 +62,17 @@ export default function SignupPage() {
     setForm(prev => ({ ...prev, [field]: e.target.value }));
     setError('');
 
-    // If email changed and was verified, reset verification
-    if (field === 'email' && emailVerified && e.target.value.trim().toLowerCase() !== verifiedEmail) {
-      setEmailVerified(false);
-      setOtpSent(false);
-      setOtpCode('');
+    // If email changed, reset verification state
+    if (field === 'email') {
+      setEmailAlreadyRegistered(false);
       setOtpError('');
-      setOtpSuccess('');
-      setTimeRemaining(0);
+      if (emailVerified && e.target.value.trim().toLowerCase() !== verifiedEmail) {
+        setEmailVerified(false);
+        setOtpSent(false);
+        setOtpCode('');
+        setOtpSuccess('');
+        setTimeRemaining(0);
+      }
     }
   };
 
@@ -98,8 +102,10 @@ export default function SignupPage() {
         setOtpSuccess(data.message || 'Verification code sent!');
         setTimeRemaining(data.timeRemaining || 120);
         setOtpCode('');
+        setEmailAlreadyRegistered(false);
       } else {
         setOtpError(data.error || 'Failed to send code.');
+        setEmailAlreadyRegistered(!!data.alreadyRegistered);
       }
     } catch {
       setOtpError('Network error. Please try again.');
@@ -352,6 +358,18 @@ export default function SignupPage() {
                 )}
               </div>
             </div>
+
+            {/* Show OTP error even when OTP field is not yet shown (e.g. 409 email already registered) */}
+            {!otpSent && !emailVerified && otpError && (
+              <div className="auth-field">
+                <p className="auth-otp-error">
+                  {otpError}
+                  {emailAlreadyRegistered && (
+                    <> <Link to="/login" className="auth-link" style={{ marginLeft: 4 }}>Sign in instead</Link></>
+                  )}
+                </p>
+              </div>
+            )}
 
             {/* OTP input field — shown after code is sent */}
             {otpSent && !emailVerified && (

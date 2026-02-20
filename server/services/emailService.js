@@ -29,14 +29,14 @@ function createTransporter() {
     return null;
   }
 
-  // Use port 465 (direct SSL) — port 587 (STARTTLS) is blocked on many cloud platforms
-  // including Render free tier. Port 465 is more reliable.
-  const port = parseInt(process.env.SMTP_PORT || '465', 10);
+  // Port 465 = direct SSL (secure: true), Port 587 = STARTTLS (secure: false)
+  const port = parseInt(process.env.SMTP_PORT || '587', 10);
+  const isSecure = port === 465;
 
   const transport = nodemailer.createTransport({
     host,
     port,
-    secure: true,           // Always use SSL for reliability on cloud hosts
+    secure: isSecure,       // true for 465 (SSL), false for 587 (STARTTLS)
     auth: { user, pass },
     family: 4,              // Force IPv4 — Render can't route IPv6
     connectionTimeout: 15000,
@@ -44,7 +44,7 @@ function createTransporter() {
     socketTimeout: 20000,
   });
 
-  console.log(`📧 SMTP configured: ${host}:${port} (SSL, IPv4) as ${user}`);
+  console.log(`📧 SMTP configured: ${host}:${port} (${isSecure ? 'SSL' : 'STARTTLS'}, IPv4) as ${user}`);
   return transport;
 }
 
