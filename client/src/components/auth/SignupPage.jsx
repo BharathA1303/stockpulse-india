@@ -297,7 +297,7 @@ export default function SignupPage() {
           </div>
 
           <h1 className="auth-form-title">Create account</h1>
-          <p className="auth-form-subtitle">Set up your trading account in seconds</p>
+          <p className="auth-form-subtitle">Set up your trading account in a seconds</p>
 
           <form className="auth-form" onSubmit={handleSubmit}>
             {error && (
